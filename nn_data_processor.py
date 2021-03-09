@@ -38,7 +38,7 @@ class QGDataProcessor:
 
         # Show the basic information about the dataset
         self.logger.info(f"Dataset Description: {dataset['train'].description}")
-        self.logger.info(f"Dataset Citation: {dataset['train'].citation}")
+        # self.logger.info(f"Dataset Citation: {dataset['train'].citation}")
         self.logger.info(f"Dataset Homepage: {dataset['train'].homepage}")
         self.logger.info(f"Dataset License: {dataset['train'].license}")
         self.logger.info(f"Dataset Summary: {dataset}")
@@ -48,12 +48,15 @@ class QGDataProcessor:
 
         # Process the dataset
         self._map_quest_types()
-        self._tokenize_qg()
 
-    def _tokenize_qg(self):
+    def tokenize_qg(self, quest_prefix=False):
         """
-        Tokenize the dataset `self.dataset` by the tokenizer `self.tokenizer`.
+        Prefix the "context" and "question", and tokenize the dataset `self.dataset` by the tokenizer `self.tokenizer`.
         """
+
+        def _add_prefix(item, column):
+            quest_type = (item['quest_type'] + ': ') if quest_prefix else ''
+            return f'{quest_type}{item[column]}'
 
         def _tokenize(item):
             # Tokenize an `item` by the tokenizer
@@ -61,8 +64,8 @@ class QGDataProcessor:
             A helper function that tokenizes an input item by a T5-based tokenizer.
             """
             common_args = {'padding': 'max_length', 'pad_to_max_length': True, 'truncation': True}
-            source_tokens = self.tokenizer(item['context'], max_length=self.max_source_len, **common_args)
-            target_tokens = self.tokenizer(item['question'], max_length=self.max_target_len, **common_args)
+            source_tokens = self.tokenizer(_add_prefix(item, 'context'), max_length=self.max_source_len, **common_args)
+            target_tokens = self.tokenizer(_add_prefix(item, 'question'), max_length=self.max_target_len, **common_args)
 
             # Store the tokens in the pre-defined column names required by the base model (T5).
             # Note: If you'd like to use a different model, you may have to replace these
@@ -75,7 +78,7 @@ class QGDataProcessor:
 
             return encodings
 
-        self.dataset = self.dataset.map(_tokenize)
+        return self.dataset.map(_tokenize)
 
     def _map_quest_types(self):
         """

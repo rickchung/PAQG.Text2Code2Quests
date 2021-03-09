@@ -13,18 +13,21 @@ from utils import freeze_embeds, get_my_logger
 logger = get_my_logger(__name__)
 
 # Arguments
+target_quest_type = "what,how"
+quest_type_label = target_quest_type.replace(',', '-')
 base_model_name = 't5-small'
-path_train_dataset = Path('Datasets', f'train_allquests_{base_model_name}')
-path_valid_dataset = Path('Datasets', f'valid_allquests_{base_model_name}')
-path_tuned_model = Path('Models', f'tuned_allquests_{base_model_name}')
-target_quest_type = "what"
+
+path_train_dataset = Path('Datasets', f'train_{quest_type_label}_{base_model_name}')
+path_valid_dataset = Path('Datasets', f'valid_{quest_type_label}_{base_model_name}')
+path_tuned_model = Path('Models', f'tuned_{quest_type_label}_{base_model_name}')
+
 
 # Init a question type filter
-if target_quest_type:
-    type_list = target_quest_type.split(',')
-    target_quest_filter = lambda item: item['quest_type'] in type_list
-else:
-    target_quest_filter = lambda x: True
+def target_quest_filter(item):
+    if target_quest_type:
+        return item['quest_type'] in target_quest_type.split(',')
+    return True
+
 
 # If the dataset has already existed, do not build a new one
 if path_train_dataset.exists() or path_valid_dataset.exists():
@@ -40,8 +43,10 @@ else:
     data_processor = QGDataProcessor(tokenizer)
     data_processor.load_dataset()
 
+    # Get a tokenized dataset
+    dataset = data_processor.tokenize_qg(quest_prefix=True)
+
     # Filter the dataset
-    dataset = data_processor.dataset
     dataset = dataset.filter(target_quest_filter)
 
     # Extract train/valid dataset
@@ -57,14 +62,19 @@ else:
     # Save the tokenizer
     data_processor.tokenizer.save_pretrained(path_tuned_model)
 
-# Init a base model and fine-tune it
+# Peek the train dataset
+logger.info(f'Train Dataset Summary: {train_dataset}')
+
+# Init a base model and freeze the embeddings
 logger.info("Init the fine-tuning process")
 model = T5ForConditionalGeneration.from_pretrained(base_model_name)
 logger.info("Freeze the base model's embeddings.")
 freeze_embeds(model)
 
+# Init a Trainer
 training_args = TrainingArguments(
-    num_train_epochs=1, output_dir='Results', logging_dir='Logs',
+    output_dir='Results', logging_dir='Logs',
+    num_train_epochs=3,
     per_device_train_batch_size=8,
     per_device_eval_batch_size=8,
     warmup_steps=500,
