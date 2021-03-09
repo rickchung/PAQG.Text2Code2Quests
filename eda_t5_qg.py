@@ -64,7 +64,7 @@ logger.info("Freeze the base model's embeddings.")
 freeze_embeds(model)
 
 training_args = TrainingArguments(
-    num_train_epochs=1, output_dir='results', logging_dir='logs',
+    num_train_epochs=1, output_dir='Results', logging_dir='Logs',
     per_device_train_batch_size=8,
     per_device_eval_batch_size=8,
     warmup_steps=500,
