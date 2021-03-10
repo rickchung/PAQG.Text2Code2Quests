@@ -13,7 +13,7 @@ from utils import freeze_embeds, get_my_logger
 logger = get_my_logger(__name__)
 
 # Arguments
-target_quest_type = "what,how"
+target_quest_type = "what,how,which"
 quest_type_label = target_quest_type.replace(',', '-')
 base_model_name = 't5-small'
 
@@ -74,7 +74,7 @@ freeze_embeds(model)
 # Init a Trainer
 training_args = TrainingArguments(
     output_dir='Results', logging_dir='Logs',
-    num_train_epochs=3,
+    num_train_epochs=1,
     per_device_train_batch_size=8,
     per_device_eval_batch_size=8,
     warmup_steps=500,
