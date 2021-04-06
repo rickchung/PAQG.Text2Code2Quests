@@ -1,7 +1,20 @@
+import re
+
 import datasets
 import transformers
 
 from utils import *
+
+
+def highlight_keywords(example, hl_token='<hl>', code_token='<co>'):
+    """
+    Transform keywords like {\\bf key} or \\java{key} into a phrase like <hl> key <hl>.
+    """
+    regex1 = re.compile(r'{\\bf (\w+)}')
+    example1 = regex1.sub(hl_token + " " + r'\1' + " " + hl_token, example)
+    regex2 = re.compile(r'\\java[ ]?{(\w+)}')
+    example2 = regex2.sub(code_token + " " + r'\1' + " " + code_token, example1)
+    return example2
 
 
 class QGDataProcessor:
@@ -47,14 +60,14 @@ class QGDataProcessor:
         self.dataset = dataset
 
         # Process the dataset
-        self._map_quest_types()
+        self._preprocess_question_types()
 
-    def tokenize_qg(self, quest_prefix=False):
+    def get_tokenized_dataset(self, quest_prefix=False):
         """
         Prefix the "context" and "question", and tokenize the dataset `self.dataset` by the tokenizer `self.tokenizer`.
         """
 
-        def _add_prefix(item, column):
+        def _get_prefix(item, column):
             quest_type = (item['quest_type'] + ': ') if quest_prefix else ''
             return f'{quest_type}{item[column]}'
 
@@ -64,8 +77,8 @@ class QGDataProcessor:
             A helper function that tokenizes an input item by a T5-based tokenizer.
             """
             common_args = {'padding': 'max_length', 'pad_to_max_length': True, 'truncation': True}
-            source_tokens = self.tokenizer(_add_prefix(item, 'context'), max_length=self.max_source_len, **common_args)
-            target_tokens = self.tokenizer(_add_prefix(item, 'question'), max_length=self.max_target_len, **common_args)
+            source_tokens = self.tokenizer(_get_prefix(item, 'context'), max_length=self.max_source_len, **common_args)
+            target_tokens = self.tokenizer(_get_prefix(item, 'question'), max_length=self.max_target_len, **common_args)
 
             # Store the tokens in the pre-defined column names required by the base model (T5).
             # Note: If you'd like to use a different model, you may have to replace these
@@ -80,13 +93,13 @@ class QGDataProcessor:
 
         return self.dataset.map(_tokenize)
 
-    def _map_quest_types(self):
+    def _preprocess_question_types(self):
         """
         Process the loaded dataset in `load_dataset()`. This method does the following tasks:
         - Add one extra column `question_type` to denote the type of questions
         """
 
-        def _assign_quest_type(item):
+        def _get_question_type(item):
             """
             A helper function that decides the question type according to the question text in `item`.
             """
@@ -108,4 +121,5 @@ class QGDataProcessor:
 
             return {'quest_type': quest_type}
 
-        self.dataset = self.dataset.map(_assign_quest_type)
+        # Assign the question type to each item
+        self.dataset = self.dataset.map(_get_question_type)

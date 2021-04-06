@@ -1,11 +1,22 @@
 from pathlib import Path
-from pprint import pprint
 
+import pandas as pd
+from datasets import Dataset
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 
+# %% ==================== Load the textbook data for evaluation ====================
+
+textbook = pd.read_json('data/thinkjava2.json')
+dataset = Dataset.from_pandas(textbook)
+
+# Only one chapter, plain context paragraphs without code
+dataset1 = dataset.filter(lambda ex: (ex['chapter'] == 'variables and operators') and (ex['code'] == ''))
+
+# %% ==================== Build a simple QG pipeline ====================
+
+path_model = Path('Models', f'tuned_what-how-which-where-who-other_t5-small')
 # path_model = Path('Models', f'tuned_what_t5-small')
 # path_model = Path('Models', f'tuned_what-how-which_t5-small')
-path_model = Path('Models', f'tuned_what-how-which-where-who-other_t5-small')
 # path_model = 't5-small'
 
 model = T5ForConditionalGeneration.from_pretrained(path_model)
@@ -30,11 +41,6 @@ def ask_questions(context):
     }
 
 
-test_texts = [
-    'The code terminates the current line by writing the line separator string.',
-    'You terminates the current line by writing the line separator string.',
-]
-
-for i in test_texts:
-    pprint(ask_questions(i))
-    print()
+input_dataset = dataset1
+output_dataset = input_dataset.map(lambda ex: ask_questions(ex['pre_context']))
+output_dataset.save_to_disk(Path("outputs", "gen_questions_sample"))

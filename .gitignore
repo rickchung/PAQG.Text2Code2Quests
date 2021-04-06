@@ -8,6 +8,7 @@ Tutorials
 *.xml
 *.iml
 .idea
+outputs
 
 
 # Byte-compiled / optimized / DLL files

@@ -17,9 +17,9 @@ target_quest_type = "what,how,which,where,who,other"
 quest_type_label = target_quest_type.replace(',', '-')
 base_model_name = 't5-small'
 
-path_train_dataset = Path('Datasets', f'train_{quest_type_label}_{base_model_name}')
-path_valid_dataset = Path('Datasets', f'valid_{quest_type_label}_{base_model_name}')
-path_tuned_model = Path('Models', f'tuned_{quest_type_label}_{base_model_name}')
+path_train_dataset = Path('data', f'train_{quest_type_label}_{base_model_name}')
+path_valid_dataset = Path('data', f'valid_{quest_type_label}_{base_model_name}')
+path_tuned_model = Path('models', f'tuned_{quest_type_label}_{base_model_name}')
 
 
 # Init a question type filter
@@ -44,7 +44,7 @@ else:
     data_processor.load_dataset()
 
     # Get a tokenized dataset
-    dataset = data_processor.tokenize_qg(quest_prefix=True)
+    dataset = data_processor.get_tokenized_dataset(quest_prefix=True)
 
     # Filter the dataset
     dataset = dataset.filter(target_quest_filter)

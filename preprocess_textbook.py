@@ -126,15 +126,23 @@ def serialize_tex(path_to_tex):
                 'chapter': chapter,
                 'section': section,
             })
+        elif e.startswith('context:'):
+            examples.append({
+                'code': '',
+                'pre_context': _get_aftertag_content(e),
+                'post_context': '',
+                'chapter': chapter,
+                'section': section,
+            })
 
     return examples, indexes, java_kws
 
 
 if __name__ == '__main__':
-    path_thinkjava2 = Path("Datasets", "ThinkJava2-master")
-    path_thinkjava2_out = Path('Datasets', 'thinkjava2.json')
-    path_thinkjava2_out1 = Path('Datasets', 'thinkjava2_index.json')
-    path_thinkjava2_out2 = Path('Datasets', 'thinkjava2_javakw.json')
+    path_thinkjava2 = Path("data", "ThinkJava2-master")
+    path_thinkjava2_out = Path('data', 'thinkjava2.json')
+    path_thinkjava2_out1 = Path('data', 'thinkjava2_index.json')
+    path_thinkjava2_out2 = Path('data', 'thinkjava2_javakw.json')
 
     path_chapters = {
         'computer_programming': 'ch01.tex',
@@ -159,18 +167,18 @@ if __name__ == '__main__':
     for k, v in path_chapters.items():
         path_chapters[k] = Path(path_thinkjava2, v)
 
-    docs = {}
+    docs = []
     index = {}
     javakw = {}
     for topic, path in path_chapters.items():
         doc, index1, javakw1 = serialize_tex(path)
-        docs[topic] = doc
+        docs += doc
         index[topic] = index1
         javakw[topic] = Counter(javakw1)
 
     with open(path_thinkjava2_out, 'w+') as fout:
-        json.dump(docs, fout)
+        json.dump(docs, fout, indent=2)
     with open(path_thinkjava2_out1, 'w+') as fout:
-        json.dump(index, fout)
+        json.dump(index, fout, indent=2)
     with open(path_thinkjava2_out2, 'w+') as fout:
-        json.dump(javakw, fout)
+        json.dump(javakw, fout, indent=2)
