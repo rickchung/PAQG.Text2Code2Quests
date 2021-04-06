@@ -1,19 +1,19 @@
 """
-EDA: Fine-tune a T5 model for quesiton generation.
+EDA: Fine-tune a T5 model for question generation.
 """
 from pathlib import Path
 
 from datasets import load_from_disk
 from transformers import T5Tokenizer, T5ForConditionalGeneration, TrainingArguments, Trainer
 
-from nn_data_processor import QGDataProcessor
+from qa_data_preprocess import QGDataProcessor
 from utils import freeze_embeds, get_my_logger
 
 # Get a custom logger for this file
 logger = get_my_logger(__name__)
 
 # Arguments
-target_quest_type = "what,how,which"
+target_quest_type = "what,how,which,where,who,other"
 quest_type_label = target_quest_type.replace(',', '-')
 base_model_name = 't5-small'
 

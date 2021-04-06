@@ -1,10 +1,12 @@
 """
 Clean and preprocess some datasets for the study.
 This script is not about producing data for an nn.Module.
-You can find more detail for that case in `nn_data_processor.py`.
+You can find more detail for that case in `qa_data_preprocess.py`.
 """
 
 import json
+import re
+from collections import Counter
 from pathlib import Path
 
 
@@ -12,6 +14,8 @@ def serialize_tex(path_to_tex):
     """
     Serialize a tex file and keep only texts of our interest.
     """
+
+    re_javakw = re.compile(r'\\java{([\w]+)}')
 
     with open(path_to_tex, 'r') as fin:
         lines = fin.readlines()
@@ -24,6 +28,7 @@ def serialize_tex(path_to_tex):
 
     blocks = []
     indexes = []
+    java_kws = []
     i = -1
     while True:
         i += 1
@@ -76,6 +81,7 @@ def serialize_tex(path_to_tex):
         # Normal text
         else:
             blocks.append(f'context: {next_cleaned[0].upper() + next_cleaned[1:]}')
+            java_kws += re_javakw.findall(next_cleaned)
 
     # Merge "context:" blocks
     tmp = []
@@ -121,26 +127,50 @@ def serialize_tex(path_to_tex):
                 'section': section,
             })
 
-    return examples
+    return examples, indexes, java_kws
 
 
 if __name__ == '__main__':
     path_thinkjava2 = Path("Datasets", "ThinkJava2-master")
     path_thinkjava2_out = Path('Datasets', 'thinkjava2.json')
+    path_thinkjava2_out1 = Path('Datasets', 'thinkjava2_index.json')
+    path_thinkjava2_out2 = Path('Datasets', 'thinkjava2_javakw.json')
 
     path_chapters = {
-        'variable': Path(path_thinkjava2, 'ch02.tex'),
-        'io': Path(path_thinkjava2, 'ch03.tex'),
-        'methods_testing': Path(path_thinkjava2, 'ch04.tex'),
-        'conditionals': Path(path_thinkjava2, 'ch05.tex'),
-        'loops_strings': Path(path_thinkjava2, 'ch06.tex'),
-        'arrays_references': Path(path_thinkjava2, 'ch07.tex'),
+        'computer_programming': 'ch01.tex',
+        'variable': 'ch02.tex',
+        'io': 'ch03.tex',
+        'methods_testing': 'ch04.tex',
+        'conditionals': 'ch05.tex',
+        'loops_strings': 'ch06.tex',
+        'arrays_references': 'ch07.tex',
+        'recursive_methods': 'ch08.tex',
+        'immutable_objects': 'ch09.tex',
+        'mutable_objects': 'ch10.tex',
+        'designing_classes': 'ch11.tex',
+        'arrays_of_objects': 'ch12.tex',
+        'objects_of_arrays': 'ch13.tex',
+        'extending_classes': 'ch14.tex',
+        'arrays_of_arrays': 'ch15.tex',
+        'reusing_classes': 'ch16.tex',
+        'advanced_topics': 'ch17.tex',
     }
 
-    docs = []
+    for k, v in path_chapters.items():
+        path_chapters[k] = Path(path_thinkjava2, v)
+
+    docs = {}
+    index = {}
+    javakw = {}
     for topic, path in path_chapters.items():
-        doc = serialize_tex(path)
-        docs.append({'title': topic, 'doc': serialize_tex(path)})
+        doc, index1, javakw1 = serialize_tex(path)
+        docs[topic] = doc
+        index[topic] = index1
+        javakw[topic] = Counter(javakw1)
 
     with open(path_thinkjava2_out, 'w+') as fout:
         json.dump(docs, fout)
+    with open(path_thinkjava2_out1, 'w+') as fout:
+        json.dump(index, fout)
+    with open(path_thinkjava2_out2, 'w+') as fout:
+        json.dump(javakw, fout)
