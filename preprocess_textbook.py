@@ -1,13 +1,22 @@
 """
-Clean and preprocess some datasets for the study.
-This script is not about producing data for an nn.Module.
-You can find more detail for that case in `qa_data_preprocess.py`.
+Preprocess the textbook "ThinkJava2" (https://github.com/ChrisMayfield/ThinkJava2)
 """
 
 import json
 import re
 from collections import Counter
 from pathlib import Path
+
+
+def highlight_keywords(example, hl_tokens=('<hl>', '</hi>'), code_tokens=('<co>', '</co>')):
+    """
+    Transform keywords like {\\bf key} or \\java{key} into a phrase like <hl> key <hl>.
+    """
+    regex1 = re.compile(r'{\\bf (\w+)}')
+    example1 = regex1.sub(hl_tokens[0] + " " + r'\1' + " " + hl_tokens[1], example)
+    regex2 = re.compile(r'\\java[ ]?{(\w+)}')
+    example2 = regex2.sub(code_tokens[0] + " " + r'\1' + " " + code_tokens[1], example1)
+    return example2
 
 
 def serialize_tex(path_to_tex):
@@ -123,6 +132,8 @@ def serialize_tex(path_to_tex):
                 'code': _get_aftertag_content(e),
                 'pre_context': pre_context,
                 'post_context': post_context,
+                'hl_pre_context': highlight_keywords(pre_context),
+                'hl_post_context': highlight_keywords(post_context),
                 'chapter': chapter,
                 'section': section,
             })
@@ -131,6 +142,7 @@ def serialize_tex(path_to_tex):
                 'code': '',
                 'pre_context': _get_aftertag_content(e),
                 'post_context': '',
+                'hl_pre_context': highlight_keywords(_get_aftertag_content(e)),
                 'chapter': chapter,
                 'section': section,
             })

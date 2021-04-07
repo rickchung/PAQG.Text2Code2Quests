@@ -6,7 +6,7 @@ from pathlib import Path
 from datasets import load_from_disk
 from transformers import T5Tokenizer, T5ForConditionalGeneration, TrainingArguments, Trainer
 
-from qa_data_preprocess import QGDataProcessor
+from preprocess_train_data import QGDataProcessor
 from utils import freeze_embeds, get_my_logger
 
 # Get a custom logger for this file

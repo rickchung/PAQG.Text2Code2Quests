@@ -1,20 +1,7 @@
-import re
-
 import datasets
 import transformers
 
 from utils import *
-
-
-def highlight_keywords(example, hl_token='<hl>', code_token='<co>'):
-    """
-    Transform keywords like {\\bf key} or \\java{key} into a phrase like <hl> key <hl>.
-    """
-    regex1 = re.compile(r'{\\bf (\w+)}')
-    example1 = regex1.sub(hl_token + " " + r'\1' + " " + hl_token, example)
-    regex2 = re.compile(r'\\java[ ]?{(\w+)}')
-    example2 = regex2.sub(code_token + " " + r'\1' + " " + code_token, example1)
-    return example2
 
 
 class QGDataProcessor:
@@ -104,7 +91,7 @@ class QGDataProcessor:
             A helper function that decides the question type according to the question text in `item`.
             """
             # Custom predefined question types
-            quest_types = {
+            quest_type_getters = {
                 'what': lambda text: text.lower().startswith("what"),
                 'how': lambda text: text.lower().startswith("how"),
                 'when': lambda text: text.lower().startswith("when"),
@@ -115,7 +102,7 @@ class QGDataProcessor:
 
             # Filter the question text and assign a new question type when anything matches
             quest_type = 'other'
-            for k, v in quest_types.items():
+            for k, v in quest_type_getters.items():
                 if v(item['question']):
                     quest_type = k
 
