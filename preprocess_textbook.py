@@ -12,11 +12,22 @@ def highlight_keywords(example, hl_tokens=('<hl>', '</hi>'), code_tokens=('<co>'
     """
     Transform keywords like {\\bf key} or \\java{key} into a phrase like <hl> key <hl>.
     """
-    regex1 = re.compile(r'{\\bf (\w+)}')
-    example1 = regex1.sub(hl_tokens[0] + " " + r'\1' + " " + hl_tokens[1], example)
-    regex2 = re.compile(r'\\java[ ]?{(\w+)}')
-    example2 = regex2.sub(code_tokens[0] + " " + r'\1' + " " + code_tokens[1], example1)
-    return example2
+    regex_kws = r'\w"\';+\-*/%=.\\()&\|!>< '
+
+    # Match Java code
+    regex2 = re.compile(r'\\java[ ]?{([' + regex_kws + r']+)}')
+    example = regex2.sub(code_tokens[0] + " " + r'\1' + " " + code_tokens[1], example)
+
+    # Highlight key phrases
+    for i in [r'{\\bf ([' + regex_kws + r']+)}', r'``([' + regex_kws + r',]+)\'\'']:
+        regex1 = re.compile(i)
+        example = regex1.sub(hl_tokens[0] + " " + r'\1' + " " + hl_tokens[1], example)
+
+    # Remove control code
+    for i in [r'{\\em[ ]?(.*)}', r'\\it[ ]?{(.*)}', r'\\url[ ]?{(.*)}', r'\\ref[ ]?{(.*)}']:
+        regex_rm = re.compile(i)
+        example = regex_rm.sub(r'\1', example)
+    return example
 
 
 def serialize_tex(path_to_tex):
