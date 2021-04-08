@@ -1,22 +1,25 @@
+import argparse
 from pathlib import Path
 
 import pandas as pd
 from datasets import Dataset
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 
+argparser = argparse.ArgumentParser()
+argparser.add_argument('--model', required=True)
+argparser.add_argument('--output', required=True)
+args = argparser.parse_args()
+
 # %% ==================== Load the textbook data for evaluation ====================
 
 textbook = pd.read_json('data/thinkjava2.json')
 dataset = Dataset.from_pandas(textbook)
-
 # Only one chapter, plain context paragraphs without code
 dataset1 = dataset.filter(lambda ex: (ex['chapter'] == 'variables and operators') and (ex['code'] == ''))
 
 # %% ==================== Build a simple QG pipeline ====================
 
-path_model = Path('Models', f'tuned_what-how-which-where-who-other_t5-small')
-# path_model = Path('Models', f'tuned_what_t5-small')
-# path_model = Path('Models', f'tuned_what-how-which_t5-small')
+path_model = Path('models', args.model)
 # path_model = 't5-small'
 
 model = T5ForConditionalGeneration.from_pretrained(path_model)
@@ -31,16 +34,19 @@ def ask_questions(context):
         return output_text
 
     return {
-        'context': context,
         'what': seq2seq(context, "what: "),
-        'how': seq2seq(context, "how: "),
+        'who': seq2seq(context, "who: "),
         'which': seq2seq(context, "which: "),
         'where': seq2seq(context, "where: "),
-        'who': seq2seq(context, "who: "),
+        'why': seq2seq(context, "why: "),
+        'how': seq2seq(context, "how: "),
         'other': seq2seq(context, "other: "),
     }
 
 
 input_dataset = dataset1
-output_dataset = input_dataset.map(lambda ex: ask_questions(ex['pre_context']))
-output_dataset.save_to_disk(Path("outputs", "gen_questions_sample"))
+output_dataset = input_dataset.map(lambda ex: ask_questions(ex['hl_pre_context']))
+output_dataset.save_to_disk(Path("outputs", args.output))
+output_dataset.to_csv(
+    Path("outputs", f"{args.output}.csv"),
+    columns=['chapter', 'section', 'hl_pre_context', 'who', 'where', 'what', 'which', 'why', 'how', 'other'])

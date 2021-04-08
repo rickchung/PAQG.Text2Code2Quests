@@ -39,9 +39,9 @@ class QGDataProcessor:
         # Show the basic information about the dataset
         self.logger.info(f"Dataset Description: {dataset['train'].description}")
         # self.logger.info(f"Dataset Citation: {dataset['train'].citation}")
-        self.logger.info(f"Dataset Homepage: {dataset['train'].homepage}")
-        self.logger.info(f"Dataset License: {dataset['train'].license}")
-        self.logger.info(f"Dataset Summary: {dataset}")
+        # self.logger.info(f"Dataset Homepage: {dataset['train'].homepage}")
+        # self.logger.info(f"Dataset License: {dataset['train'].license}")
+        # self.logger.info(f"Dataset Summary: {dataset}")
 
         # Reserve the dataset for later processing
         self.dataset = dataset
@@ -49,14 +49,10 @@ class QGDataProcessor:
         # Process the dataset
         self._preprocess_question_types()
 
-    def get_tokenized_dataset(self, quest_prefix=False):
+    def get_tokenized_data(self, context_prefix=False, quest_prefix=False, highlight_answer=False):
         """
         Prefix the "context" and "question", and tokenize the dataset `self.dataset` by the tokenizer `self.tokenizer`.
         """
-
-        def _get_prefix(item, column):
-            quest_type = (item['quest_type'] + ': ') if quest_prefix else ''
-            return f'{quest_type}{item[column]}'
 
         def _tokenize(item):
             # Tokenize an `item` by the tokenizer
@@ -64,8 +60,20 @@ class QGDataProcessor:
             A helper function that tokenizes an input item by a T5-based tokenizer.
             """
             common_args = {'padding': 'max_length', 'pad_to_max_length': True, 'truncation': True}
-            source_tokens = self.tokenizer(_get_prefix(item, 'context'), max_length=self.max_source_len, **common_args)
-            target_tokens = self.tokenizer(_get_prefix(item, 'question'), max_length=self.max_target_len, **common_args)
+
+            context = item['context']
+            question = item['question']
+            question_type = item['quest_type']
+
+            if context_prefix:
+                # Add the question type to the context as prefix to inform the model
+                context = f'{question_type}: {context}'
+            if quest_prefix:
+                # TODO: Does the question need the prefix?
+                question = f'{question_type}: {question}'
+
+            source_tokens = self.tokenizer(context, max_length=self.max_source_len, **common_args)
+            target_tokens = self.tokenizer(question, max_length=self.max_target_len, **common_args)
 
             # Store the tokens in the pre-defined column names required by the base model (T5).
             # Note: If you'd like to use a different model, you may have to replace these
@@ -74,6 +82,8 @@ class QGDataProcessor:
                 'input_ids': source_tokens['input_ids'],
                 'labels': target_tokens['input_ids'],
                 'attention_mask': source_tokens['attention_mask'],
+                'source_text': context,
+                'target_text': question,
             }
 
             return encodings
@@ -90,21 +100,17 @@ class QGDataProcessor:
             """
             A helper function that decides the question type according to the question text in `item`.
             """
-            # Custom predefined question types
-            quest_type_getters = {
-                'what': lambda text: text.lower().startswith("what"),
-                'how': lambda text: text.lower().startswith("how"),
-                'when': lambda text: text.lower().startswith("when"),
-                'where': lambda text: text.lower().startswith("where"),
-                'which': lambda text: text.lower().startswith("which"),
-                'who': lambda text: text.lower().startswith("who"),
-            }
-
             # Filter the question text and assign a new question type when anything matches
+            question_words = ["what", "who", "where", "when", "which", "why", "how"]
             quest_type = 'other'
-            for k, v in quest_type_getters.items():
-                if v(item['question']):
+            lowered_question = item['question'].lower()
+            for k in question_words:
+                if lowered_question.startswith(k):
                     quest_type = k
+                    break;
+                # if k in lowered_question:
+                #     quest_type = k
+                #     break
 
             return {'quest_type': quest_type}
 
