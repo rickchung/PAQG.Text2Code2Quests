@@ -10,21 +10,20 @@ class QGDataProcessor:
     """
     # These tokens are for T5-based models only
     SPECIAL_TOKENS = {
-        't5': ['<hl>']
+        't5': {'HLS': '<hl>', 'HLE': '</hl>'}
     }
 
     def __init__(self, tokenizer: transformers.PreTrainedTokenizer, base_model_type='t5', max_source_len=512,
                  max_target_len=32):
+        self.dataset = None
         self.tokenizer = tokenizer
         self.max_source_len = max_source_len
         self.max_target_len = max_target_len
 
         # Get the special tokens defined for `base_model_type`
-        self.hl_token = self.SPECIAL_TOKENS[base_model_type][0]
-
+        self.special_tokens = self.SPECIAL_TOKENS[base_model_type]
         # Add custom tokens to the tokenizer
-        self.tokenizer.add_tokens([self.hl_token])
-
+        self.tokenizer.add_tokens(self.special_tokens.values())
         # Get a logger for this class
         self.logger = get_my_logger(self.__class__.__name__)
 
@@ -49,36 +48,62 @@ class QGDataProcessor:
         # Process the dataset
         self._preprocess_question_types()
 
-    def get_tokenized_data(self, context_prefix=False, quest_prefix=False, highlight_answer=False):
+    def get_tokenized_tc_tqa(self, source_prefix, target_prefix):
         """
-        Prefix the "context" and "question", and tokenize the dataset `self.dataset` by the tokenizer `self.tokenizer`.
+        Answer-aware QG: Typed Context -> Typed Question | Answer
+
         """
+        source_prefix = (source_prefix.lower() == 'true')
+        target_prefix = (target_prefix.lower() == 'true')
 
         def _tokenize(item):
-            # Tokenize an `item` by the tokenizer
-            """
-            A helper function that tokenizes an input item by a T5-based tokenizer.
-            """
-            common_args = {'padding': 'max_length', 'pad_to_max_length': True, 'truncation': True}
+            source = item['context']
+            target = f'{item["question"]} {self.special_tokens["HLS"]} {item["answers"]["text"][0]}'
+            question_type = item['quest_type']
 
+            if source_prefix:
+                source = f'{question_type}: {source}'
+            if target_prefix:
+                target = f'{question_type}: {target}'
+
+            common_args = {'padding': 'max_length', 'pad_to_max_length': True, 'truncation': True}
+            source_tokens = self.tokenizer(source, max_length=self.max_source_len, **common_args)
+            target_tokens = self.tokenizer(target, max_length=self.max_target_len, **common_args)
+
+            return {
+                'input_ids': source_tokens['input_ids'],
+                'labels': target_tokens['input_ids'],
+                'attention_mask': source_tokens['attention_mask'],
+                'source_text': source,
+                'target_text': target,
+            }
+
+        return self.dataset.map(_tokenize)
+
+    def get_tokenized_tc_tq(self, source_prefix, target_prefix):
+        """
+        QG: Typed Context -> Typed Question
+        """
+        source_prefix = (source_prefix.lower() == 'true')
+        target_prefix = (target_prefix.lower() == 'true')
+
+        def _tokenize(item):
             context = item['context']
             question = item['question']
             question_type = item['quest_type']
 
-            if context_prefix:
+            if source_prefix:
                 # Add the question type to the context as prefix to inform the model
                 context = f'{question_type}: {context}'
-            if quest_prefix:
+            if target_prefix:
                 # TODO: Does the question need the prefix?
                 question = f'{question_type}: {question}'
 
+            common_args = {'padding': 'max_length', 'pad_to_max_length': True, 'truncation': True}
             source_tokens = self.tokenizer(context, max_length=self.max_source_len, **common_args)
             target_tokens = self.tokenizer(question, max_length=self.max_target_len, **common_args)
 
-            # Store the tokens in the pre-defined column names required by the base model (T5).
-            # Note: If you'd like to use a different model, you may have to replace these
-            # names by those required by the model.
-            encodings = {
+            return {
                 'input_ids': source_tokens['input_ids'],
                 'labels': target_tokens['input_ids'],
                 'attention_mask': source_tokens['attention_mask'],
@@ -86,7 +111,35 @@ class QGDataProcessor:
                 'target_text': question,
             }
 
-            return encodings
+        return self.dataset.map(_tokenize)
+
+    def get_tokenized_tc_ta(self, source_prefix, target_prefix):
+        """
+        KPE: Typed Context -> Typed Answer
+        """
+        source_prefix = (source_prefix.lower() == 'true')
+        target_prefix = (target_prefix.lower() == 'true')
+
+        def _tokenize(item):
+            source, target = item['context'], item['answers']['text'][0]
+            question_type = item['quest_type']
+
+            if source_prefix:
+                source = f'{question_type}: {source}'
+            if target_prefix:
+                target = f'{question_type}: {target}'
+
+            common_args = {'padding': 'max_length', 'pad_to_max_length': True, 'truncation': True}
+            source_tokens = self.tokenizer(source, max_length=self.max_source_len, **common_args)
+            target_tokens = self.tokenizer(target, max_length=self.max_target_len, **common_args)
+
+            return {
+                'input_ids': source_tokens['input_ids'],
+                'labels': target_tokens['input_ids'],
+                'attention_mask': source_tokens['attention_mask'],
+                'source_text': source,
+                'target_text': target,
+            }
 
         return self.dataset.map(_tokenize)
 
@@ -107,10 +160,7 @@ class QGDataProcessor:
             for k in question_words:
                 if lowered_question.startswith(k):
                     quest_type = k
-                    break;
-                # if k in lowered_question:
-                #     quest_type = k
-                #     break
+                    break
 
             return {'quest_type': quest_type}
 

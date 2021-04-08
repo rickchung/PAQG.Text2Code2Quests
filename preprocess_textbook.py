@@ -8,7 +8,7 @@ from collections import Counter
 from pathlib import Path
 
 
-def highlight_keywords(example, hl_tokens=('<hl>', '</hi>'), code_tokens=('<co>', '</co>')):
+def highlight_keywords(example, hl_tokens=('<hl>', '</hl>'), code_tokens=('<co>', '</co>')):
     """
     Transform keywords like {\\bf key} or \\java{key} into a phrase like <hl> key <hl>.
     """

@@ -29,37 +29,36 @@ argparser.add_argument('--question_labels', default="what,how,which,where,who,wh
 argparser.add_argument('--base_model_name', default='t5-small')
 argparser.add_argument('--reuse_existing_data', default="true")
 # dataset arguments
-argparser.add_argument('--context_qtype_prefix', default="true")
-argparser.add_argument('--question_qtype_prefix', default="true")
-# Parse the arguments
+argparser.add_argument('--tokenizer_args', default='tc_tq,true,true')
+
 args = argparser.parse_args()
-args.context_qtype_prefix = (args.context_qtype_prefix.lower() == "true")
-args.question_qtype_prefix = (args.question_qtype_prefix.lower() == "true")
+
+# %%
+
+# Tokenizer arguments
+tokenizer_args = args.tokenizer_args.split(',')
+tokenizer_args_label = "_".join(tokenizer_args)
+# Overwrite the output
 args.overwrite_output_dir = (args.overwrite_output_dir.lower() == "true")
+# Reuse the dataset
 args.reuse_existing_data = (args.reuse_existing_data.lower() == "true")
+# Question type filters
+target_quest_type = args.question_labels
+quest_type_label = target_quest_type.replace(',', '-')
+# Base model name
+base_model_name = args.base_model_name
+# Output paths
+path_train_dataset = Path(
+    'models', 'train_data', f'train_{quest_type_label}_{tokenizer_args_label}_{base_model_name}')
+path_valid_dataset = Path(
+    'models', 'train_data', f'valid_{quest_type_label}_{tokenizer_args_label}_{base_model_name}')
+path_tuned_model = Path(
+    'models', f'tuned_{quest_type_label}_{tokenizer_args_label}_{base_model_name}')
+
+# %%
 
 logging.info('===== Start the fine-tuning process =====')
 logging.info('Arguments: ' + str(args))
-
-# Init
-
-target_quest_type = args.question_labels
-quest_type_label = target_quest_type.replace(',', '-')
-
-base_model_name = args.base_model_name
-
-path_train_dataset = Path('models', 'train_data',
-                          f'train_{quest_type_label}'
-                          f'_cf{args.context_qtype_prefix}'
-                          f'_qf{args.question_qtype_prefix}_{base_model_name}')
-path_valid_dataset = Path('models', 'train_data',
-                          f'valid_{quest_type_label}'
-                          f'_cf{args.context_qtype_prefix}'
-                          f'_qf{args.question_qtype_prefix}_{base_model_name}')
-path_tuned_model = Path('models',
-                        f'tuned_{quest_type_label}'
-                        f'_cf{args.context_qtype_prefix}'
-                        f'_qf{args.question_qtype_prefix}_{base_model_name}')
 
 # If the dataset has already existed, do not build a new one
 if args.reuse_existing_data and path_train_dataset.exists():
@@ -69,8 +68,8 @@ if args.reuse_existing_data and path_train_dataset.exists():
     data_processor = QGDataProcessor(tokenizer)
     data_processor.tokenizer.save_pretrained(path_tuned_model)
     # Load the existing train/valid datasets
-    train_dataset = load_from_disk(path_train_dataset)
-    valid_dataset = load_from_disk(path_valid_dataset)
+    train_dataset = load_from_disk(str(path_train_dataset))
+    valid_dataset = load_from_disk(str(path_valid_dataset))
 else:
     logging.warning("Building a new dataset from scratch")
     # Load a tokenizer
@@ -78,11 +77,17 @@ else:
     # Load the dataset by the HF Datasets library
     data_processor = QGDataProcessor(tokenizer)
     data_processor.load_dataset()
+
     # Get the tokenized dataset
-    dataset = data_processor.get_tokenized_data(
-        context_prefix=args.context_qtype_prefix,
-        quest_prefix=args.question_qtype_prefix
-    )
+    if tokenizer_args[0] == 'tc_tq':
+        dataset = data_processor.get_tokenized_tc_tq(*tokenizer_args[1:])
+    elif tokenizer_args[0] == 'tc_ta':
+        dataset = data_processor.get_tokenized_tc_ta(*tokenizer_args[1:])
+    elif tokenizer_args[0] == 'tc_tqa':
+        dataset = data_processor.get_tokenized_tc_tqa(*tokenizer_args[1:])
+    else:
+        logging.error(f"Unknown tokenizer: {tokenizer_args[0]}")
+        raise Exception(f"Unknown tokenizer: {tokenizer_args[0]}")
 
     # Apply a question type filter
     if target_quest_type:
@@ -105,6 +110,8 @@ else:
     # Save the updated tokenizer
     data_processor.tokenizer.save_pretrained(path_tuned_model)
 
+# %%
+
 # Init a base model and freeze the embeddings
 logging.info("Init the fine-tuning process")
 model = T5ForConditionalGeneration.from_pretrained(base_model_name)
@@ -118,9 +125,8 @@ training_args = TrainingArguments(
     per_device_eval_batch_size=args.per_device_eval_batch_size,
     warmup_steps=500,
     weight_decay=1e-2,
-    save_steps=1000,
+    save_steps=5000,
     output_dir=str(path_tuned_model),
-    # logging_dir='models_log',
     overwrite_output_dir=args.overwrite_output_dir
 
 )
