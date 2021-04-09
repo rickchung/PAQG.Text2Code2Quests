@@ -44,17 +44,20 @@ question_types = p_args['question_types']
 logging.info('===== Fine-tuning process =====')
 logging.info('Arguments: ' + str(args))
 
+# Load a tokenizer
+tokenizer = T5Tokenizer.from_pretrained(base_model_name)
+# Load the base dataset
+data_processor = QGDataProcessor(tokenizer)
+data_processor.load_dataset()
+# Save the tokenizer in the model folder
+data_processor.tokenizer.save_pretrained(path_tuned_model)
+
 # If the tokenzied dataset has already existed, do not build a new one
 if args.reuse_existing_data and path_tokenized_dataset.exists():
     logging.warning(f"Reuse the existing data: {path_tokenized_dataset}")
     dataset = datasets.load_from_disk(str(path_tokenized_dataset))
 else:
     logging.warning("Building a new dataset from scratch")
-    # Load a tokenizer
-    tokenizer = T5Tokenizer.from_pretrained(base_model_name)
-    # Load the dataset by the HF Datasets library
-    data_processor = QGDataProcessor(tokenizer)
-    data_processor.load_dataset()
     # Get the tokenized dataset
     if tokenizer_args[0] == 'tc_tq':
         dataset = data_processor.get_tokenized_tc_tq(*tokenizer_args[1:])
@@ -69,7 +72,6 @@ else:
         raise Exception(f"Unknown tokenizer: {tokenizer_args[0]}")
     # Save the tokenized dataset (in the data folder) and the tokenizer (in the tuned model folder)
     dataset.save_to_disk(path_tokenized_dataset)
-    data_processor.tokenizer.save_pretrained(path_tuned_model)
 
 # %%
 

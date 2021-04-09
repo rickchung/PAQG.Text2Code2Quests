@@ -10,7 +10,7 @@ def process_args(base_model_name: str, tokenizer_args: str, question_labels: str
     """
     qt_id = question_labels.replace(',', '-')
     question_types = question_labels.split(',')
-    tk_args_id = tokenizer_args.replace(',', '-')
+    tk_args_id = tokenizer_args.replace(',', '-').replace('_', '-')
     tokenizer_args_list = tokenizer_args.split(',')
 
     path_tuned_model = Path('models', f'tuned_{qt_id}_{tk_args_id}_{base_model_name}')
