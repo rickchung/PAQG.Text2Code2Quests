@@ -8,26 +8,31 @@ from collections import Counter
 from pathlib import Path
 
 
-def highlight_keywords(example, hl_tokens=('<hl>', '</hl>'), code_tokens=('<co>', '</co>')):
+def extract_keywords(example):
     """
     Transform keywords like {\\bf key} or \\java{key} into a phrase like <hl> key <hl>.
     """
+    java_code = []
+    key_phrases = []
     regex_kws = r'\w"\';+\-*/%=.\\()&\|!>< '
 
     # Match Java code
     regex2 = re.compile(r'\\java[ ]?{([' + regex_kws + r']+)}')
-    example = regex2.sub(code_tokens[0] + " " + r'\1' + " " + code_tokens[1], example)
+    java_code += regex2.findall(example)
+    example = regex2.sub(r'\1', example)
 
     # Highlight key phrases
     for i in [r'{\\bf ([' + regex_kws + r']+)}', r'``([' + regex_kws + r',]+)\'\'']:
         regex1 = re.compile(i)
-        example = regex1.sub(hl_tokens[0] + " " + r'\1' + " " + hl_tokens[1], example)
+        key_phrases += regex1.findall(example)
+        example = regex1.sub(r'\1', example)
 
     # Remove control code
     for i in [r'{\\em[ ]?(.*)}', r'\\it[ ]?{(.*)}', r'\\url[ ]?{(.*)}', r'\\ref[ ]?{(.*)}']:
         regex_rm = re.compile(i)
         example = regex_rm.sub(r'\1', example)
-    return example
+
+    return {'cleaned': example, 'java_code': java_code, 'key_phrases': key_phrases}
 
 
 def serialize_tex(path_to_tex):
@@ -139,21 +144,32 @@ def serialize_tex(path_to_tex):
         elif e.startswith('code:'):
             pre_context = _get_aftertag_content(blocks[i - 1])
             post_context = _get_aftertag_content(blocks[i + 1]) if blocks[i + 1].startswith('context') else ''
+
+            meta_precontext = extract_keywords(pre_context)
+            meta_postcontext = extract_keywords(post_context)
+
             examples.append({
                 'code': _get_aftertag_content(e),
                 'pre_context': pre_context,
                 'post_context': post_context,
-                'hl_pre_context': highlight_keywords(pre_context),
-                'hl_post_context': highlight_keywords(post_context),
+                'pre_context_cleaned': meta_precontext['cleaned'],
+                'pre_context_javacode': meta_precontext['java_code'],
+                'pre_context_key_phrases': meta_precontext['key_phrases'],
+                'post_context_cleaned': meta_postcontext['cleaned'],
+                'post_context_javacode': meta_postcontext['java_code'],
+                'post_context_key_phrases': meta_postcontext['key_phrases'],
                 'chapter': chapter,
                 'section': section,
             })
         elif e.startswith('context:'):
+            meta_context = extract_keywords(_get_aftertag_content(e))
             examples.append({
                 'code': '',
                 'pre_context': _get_aftertag_content(e),
                 'post_context': '',
-                'hl_pre_context': highlight_keywords(_get_aftertag_content(e)),
+                'pre_context_cleaned': meta_context['cleaned'],
+                'pre_context_javacode': meta_context['java_code'],
+                'pre_context_key_phrases': meta_context['key_phrases'],
                 'chapter': chapter,
                 'section': section,
             })

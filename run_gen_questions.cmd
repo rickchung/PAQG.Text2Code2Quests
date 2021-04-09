@@ -1,3 +1,4 @@
 CALL conda activate depy3
-CALL python gen_questions.py --model "tuned_what-how-which-where-who-why-other_cfTrue_qfFalse_t5-small" --output "cft_qff"
-CALL python gen_questions.py --model "tuned_what-how-which-where-who-why-other_cfTrue_qfTrue_t5-small" --output "cft_qft"
+CALL python gen_questions.py --question_labels "what,why" --tokenizer_args "tc_ta,true,true" --output "tc_ta"
+rem CALL python gen_questions.py --question_labels "what,why,when,how" --tokenizer_args "tc_tq,true,false" --output "tc_tq"
+rem CALL python gen_questions.py --question_labels "what,why,when,how" --tokenizer_args "tc_tqa,true,false" --output "tc_tqa"

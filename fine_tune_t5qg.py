@@ -49,9 +49,9 @@ quest_type_label = target_quest_type.replace(',', '-')
 base_model_name = args.base_model_name
 # Output paths
 path_train_dataset = Path(
-    'models', 'train_data', f'train_{quest_type_label}_{tokenizer_args_label}_{base_model_name}')
+    'models', 'train_data', f'train_{tokenizer_args_label}_{base_model_name}')
 path_valid_dataset = Path(
-    'models', 'train_data', f'valid_{quest_type_label}_{tokenizer_args_label}_{base_model_name}')
+    'models', 'train_data', f'valid_{tokenizer_args_label}_{base_model_name}')
 path_tuned_model = Path(
     'models', f'tuned_{quest_type_label}_{tokenizer_args_label}_{base_model_name}')
 

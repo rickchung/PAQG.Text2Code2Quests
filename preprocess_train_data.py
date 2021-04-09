@@ -10,7 +10,7 @@ class QGDataProcessor:
     """
     # These tokens are for T5-based models only
     SPECIAL_TOKENS = {
-        't5': {'HLS': '<hl>', 'HLE': '</hl>'}
+        't5': {'HLS': 'highlight:'}
     }
 
     def __init__(self, tokenizer: transformers.PreTrainedTokenizer, base_model_type='t5', max_source_len=512,
