@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import datasets
 import transformers
 
@@ -12,6 +14,7 @@ class QGDataProcessor:
     SPECIAL_TOKENS = {
         't5': {'HLS': 'highlight:'}
     }
+    path_processed_data = Path("models", "processed_qgdata")
 
     def __init__(self, tokenizer: transformers.PreTrainedTokenizer, base_model_type='t5', max_source_len=512,
                  max_target_len=32):
@@ -32,21 +35,28 @@ class QGDataProcessor:
         Load the dataset called `dataset_name` via HF Datasets. In this study, we use SQuAD.
         See https://huggingface.co/datasets/squad for more detail about this dataset.
         """
-        # Load the dataset via HF Datasets
-        dataset = datasets.load_dataset(dataset_name)
 
-        # Show the basic information about the dataset
-        self.logger.info(f"Dataset Description: {dataset['train'].description}")
-        # self.logger.info(f"Dataset Citation: {dataset['train'].citation}")
-        # self.logger.info(f"Dataset Homepage: {dataset['train'].homepage}")
-        # self.logger.info(f"Dataset License: {dataset['train'].license}")
-        # self.logger.info(f"Dataset Summary: {dataset}")
+        if self.path_processed_data.exists():
+            self.logger.warn("Reuse an existing processed QA dataset")
+            self.dataset = datasets.load_from_disk(str(self.path_processed_data))
+        else:
+            self.logger.info("Build and process a new QA dataset")
+            # Load the dataset via HF Datasets
+            dataset = datasets.load_dataset(dataset_name)
 
-        # Reserve the dataset for later processing
-        self.dataset = dataset
+            # Show the basic information about the dataset
+            self.logger.info(f'Base dataset: {dataset_name}')
+            # self.logger.info(f"Dataset Description: {dataset['train'].description}")
+            # self.logger.info(f"Dataset Citation: {dataset['train'].citation}")
+            # self.logger.info(f"Dataset Homepage: {dataset['train'].homepage}")
+            # self.logger.info(f"Dataset License: {dataset['train'].license}")
+            # self.logger.info(f"Dataset Summary: {dataset}")
 
-        # Process the dataset
-        self._preprocess_question_types()
+            # Reserve the dataset for later processing
+            self.dataset = dataset
+            # Process the dataset
+            self._preprocess_question_types()
+            self.dataset.save_to_disk(str(self.path_processed_data))
 
     def get_tokenized_tc_tqa(self, source_prefix, target_prefix):
         """
@@ -59,6 +69,38 @@ class QGDataProcessor:
         def _tokenize(item):
             source = item['context']
             target = f'{item["question"]} {self.special_tokens["HLS"]} {item["answers"]["text"][0]}'
+            question_type = item['quest_type']
+
+            if source_prefix:
+                source = f'{question_type}: {source}'
+            if target_prefix:
+                target = f'{question_type}: {target}'
+
+            common_args = {'padding': 'max_length', 'pad_to_max_length': True, 'truncation': True}
+            source_tokens = self.tokenizer(source, max_length=self.max_source_len, **common_args)
+            target_tokens = self.tokenizer(target, max_length=self.max_target_len, **common_args)
+
+            return {
+                'input_ids': source_tokens['input_ids'],
+                'labels': target_tokens['input_ids'],
+                'attention_mask': source_tokens['attention_mask'],
+                'source_text': source,
+                'target_text': target,
+            }
+
+        return self.dataset.map(_tokenize)
+
+    def get_tokenized_tca_tq(self, source_prefix, target_prefix):
+        """
+        Answer-aware QG: Typed Context | Answer -> Typed Question
+
+        """
+        source_prefix = (source_prefix.lower() == 'true')
+        target_prefix = (target_prefix.lower() == 'true')
+
+        def _tokenize(item):
+            source = f'{item["context"]} {self.special_tokens["HLS"]} {item["answers"]["text"][0]}'
+            target = item['question']
             question_type = item['quest_type']
 
             if source_prefix:

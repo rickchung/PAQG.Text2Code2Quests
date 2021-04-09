@@ -5,7 +5,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from datasets import load_from_disk
+import datasets
 from transformers import T5Tokenizer, T5ForConditionalGeneration, TrainingArguments, Trainer
 
 from preprocess_train_data import QGDataProcessor
@@ -28,9 +28,9 @@ argparser.add_argument('--overwrite_output_dir', default="true")
 argparser.add_argument('--question_labels', default="what,how,which,where,who,why,other")
 argparser.add_argument('--base_model_name', default='t5-small')
 argparser.add_argument('--reuse_existing_data', default="true")
+argparser.add_argument('--dry', action='store_true')
 # dataset arguments
 argparser.add_argument('--tokenizer_args', default='tc_tq,true,true')
-
 args = argparser.parse_args()
 
 # %%
@@ -48,28 +48,20 @@ quest_type_label = target_quest_type.replace(',', '-')
 # Base model name
 base_model_name = args.base_model_name
 # Output paths
-path_train_dataset = Path(
-    'models', 'train_data', f'train_{tokenizer_args_label}_{base_model_name}')
-path_valid_dataset = Path(
-    'models', 'train_data', f'valid_{tokenizer_args_label}_{base_model_name}')
-path_tuned_model = Path(
-    'models', f'tuned_{quest_type_label}_{tokenizer_args_label}_{base_model_name}')
+path_tokenized_dataset = Path('models', 'tokenized_data', f'{tokenizer_args_label}_{base_model_name}')
+path_tuned_model = Path('models', f'tuned_{quest_type_label}_{tokenizer_args_label}_{base_model_name}')
+path_train_dataset = Path(path_tuned_model, f'train_{tokenizer_args_label}_{base_model_name}_{quest_type_label}')
+path_valid_dataset = Path(path_tuned_model, f'valid_{tokenizer_args_label}_{base_model_name}_{quest_type_label}')
 
 # %%
 
-logging.info('===== Start the fine-tuning process =====')
+logging.info('===== Fine-tuning process =====')
 logging.info('Arguments: ' + str(args))
 
-# If the dataset has already existed, do not build a new one
-if args.reuse_existing_data and path_train_dataset.exists():
-    logging.warning("Reuse the existing data")
-    # Reload the tokenizer just in case
-    tokenizer = T5Tokenizer.from_pretrained(base_model_name)
-    data_processor = QGDataProcessor(tokenizer)
-    data_processor.tokenizer.save_pretrained(path_tuned_model)
-    # Load the existing train/valid datasets
-    train_dataset = load_from_disk(str(path_train_dataset))
-    valid_dataset = load_from_disk(str(path_valid_dataset))
+# If the tokenzied dataset has already existed, do not build a new one
+if args.reuse_existing_data and path_tokenized_dataset.exists():
+    logging.warning(f"Reuse the existing data: {path_tokenized_dataset}")
+    dataset = datasets.load_from_disk(str(path_tokenized_dataset))
 else:
     logging.warning("Building a new dataset from scratch")
     # Load a tokenizer
@@ -77,7 +69,6 @@ else:
     # Load the dataset by the HF Datasets library
     data_processor = QGDataProcessor(tokenizer)
     data_processor.load_dataset()
-
     # Get the tokenized dataset
     if tokenizer_args[0] == 'tc_tq':
         dataset = data_processor.get_tokenized_tc_tq(*tokenizer_args[1:])
@@ -85,30 +76,35 @@ else:
         dataset = data_processor.get_tokenized_tc_ta(*tokenizer_args[1:])
     elif tokenizer_args[0] == 'tc_tqa':
         dataset = data_processor.get_tokenized_tc_tqa(*tokenizer_args[1:])
+    elif tokenizer_args[0] == 'tca_tq':
+        dataset = data_processor.get_tokenized_tca_tq(*tokenizer_args[1:])
     else:
         logging.error(f"Unknown tokenizer: {tokenizer_args[0]}")
         raise Exception(f"Unknown tokenizer: {tokenizer_args[0]}")
-
-    # Apply a question type filter
-    if target_quest_type:
-        logging.info("Apply the question type filter")
-        quest_type_labels = target_quest_type.split(',')
-        dataset = dataset.filter(lambda x: x['quest_type'] in quest_type_labels)
-        for i in quest_type_labels:
-            count = len(dataset['train'].filter(lambda x: x['quest_type'] == i))
-            logging.info(f'{i} question counts = {count}')
-
-    # Extract train/valid dataset
-    dataset_format = {'columns': ['input_ids', 'labels', 'attention_mask'], 'type': 'torch'}
-    train_dataset = dataset['train']
-    valid_dataset = dataset['validation']
-    train_dataset.set_format(**dataset_format)
-    valid_dataset.set_format(**dataset_format)
-    # Save the train/valid datasets
-    train_dataset.save_to_disk(path_train_dataset)
-    valid_dataset.save_to_disk(path_valid_dataset)
-    # Save the updated tokenizer
+    # Save the tokenized dataset (in the data folder) and the tokenizer (in the tuned model folder)
+    dataset.save_to_disk(path_tokenized_dataset)
     data_processor.tokenizer.save_pretrained(path_tuned_model)
+
+# %%
+
+# Apply the question type filter
+if target_quest_type:
+    logging.info("Apply the question type filter")
+    quest_type_labels = target_quest_type.split(',')
+    dataset = dataset.filter(lambda x: x['quest_type'] in quest_type_labels)
+    for i in quest_type_labels:
+        count = len(dataset['train'].filter(lambda x: x['quest_type'] == i))
+        logging.info(f'{i} question counts = {count}')
+
+# Extract train/valid dataset
+dataset_format = {'columns': ['input_ids', 'labels', 'attention_mask'], 'type': 'torch'}
+train_dataset = dataset['train']
+valid_dataset = dataset['validation']
+train_dataset.set_format(**dataset_format)
+valid_dataset.set_format(**dataset_format)
+# Save the train/valid datasets
+train_dataset.save_to_disk(path_train_dataset)
+valid_dataset.save_to_disk(path_valid_dataset)
 
 # %%
 
@@ -133,10 +129,13 @@ training_args = TrainingArguments(
 trainer = Trainer(model=model, args=training_args, train_dataset=train_dataset, eval_dataset=valid_dataset)
 
 # Fine-tune the model
-logging.info(f"Start fine-tuning (resume: {not args.overwrite_output_dir})")
-trainer.train()
-trainer.evaluate()
+if not args.dry:
+    logging.info(f"Start fine-tuning (resume: {not args.overwrite_output_dir})")
+    trainer.train()
+    trainer.evaluate()
+    # Save the model
+    logging.info("Done")
+    model.save_pretrained(path_tuned_model)
+else:
+    logging.info(f'Dry. Do nothing (resume: {not args.overwrite_output_dir})')
 
-# Save the model
-logging.info("===== Done fine-tuning =====")
-model.save_pretrained(path_tuned_model)
