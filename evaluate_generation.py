@@ -38,7 +38,7 @@ def evaluate_by_textbook(items, context_col, path_model, question_labels):
     return rt
 
 
-def evaluate_offline(items, source_col, target_col, path_model, question_labels, path_predictions):
+def evaluate_comprehension(items, source_col, target_col, path_model, question_labels, path_predictions):
     """
     Evaluate the given items by some offline metrics.
     """
@@ -69,7 +69,13 @@ def evaluate_offline(items, source_col, target_col, path_model, question_labels,
         predictions = items_qt[qt]
         predictions_tokens = [[j.text for j in i] for i in nlp_pipe(predictions)]
         # Compute the score for the question type
-        bleu = metric_bleu.compute(predictions=predictions_tokens, references=[[i] for i in references_tokens])['bleu']
+        references_bleu = [[i] for i in references_tokens]
+        get_bleu_n = lambda n: metric_bleu.compute(
+            predictions=predictions_tokens, references=references_bleu, max_order=n)['bleu']
+        bleu1 = get_bleu_n(1)
+        bleu2 = get_bleu_n(2)
+        bleu3 = get_bleu_n(3)
+        bleu4 = get_bleu_n(4)
         rouge = metric_rouge.compute(predictions=predictions, references=references)
         rouge1_midf = rouge['rouge1'][1][2]
         rouge2_midf = rouge['rouge2'][1][2]
@@ -77,7 +83,8 @@ def evaluate_offline(items, source_col, target_col, path_model, question_labels,
         meteor = metric_meteor.compute(predictions=predictions, references=references)['meteor']
         performance.append({
             'qtype': qt, 'num_questions': len(items_qt),
-            'bleu': bleu, 'meteor': meteor,
+            'bleu1': bleu1, 'bleu4': bleu4, 'bleu2': bleu2, 'bleu3': bleu3,
+            'meteor': meteor,
             'rouge1': rouge1_midf, 'rouge2': rouge2_midf, 'rougeL': rougel_midf,
         })
     performance = pd.DataFrame(performance)
@@ -106,11 +113,10 @@ def run_evaluate_generation(**kargs):
             # Load the validation set
             dataset = datasets.load_from_disk(str(path_tokenized_data))['validation']
             logger.info("Evaluate by the SQuAD test set")
-            out, scores = evaluate_offline(dataset, 'source_text', 'target_text', path_model, quest_types,
-                                           path_gen_questions)
+            out, scores = evaluate_comprehension(dataset, 'source_text', 'target_text', path_model, quest_types,
+                                                 path_gen_questions)
             out.to_csv(f"{path_gen_questions}_squad.csv", columns=['source_text', 'target_text'] + quest_types)
             scores.to_csv(Path(path_gen_questions, f'offline_scores.csv'))
-
         else:
             logger.info("Evaluate by the textbook dataset")
             dataset = get_qg_textbook(['variables and operators'])

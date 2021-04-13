@@ -118,6 +118,8 @@ def run_finetuning(**kargs):
     else:
         logger.info(f'Dry. Do nothing (resume: {not overwrite_output_dir})')
 
+    return path_tuned_model
+
 
 if __name__ == '__main__':
     # Arguments

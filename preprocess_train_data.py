@@ -136,7 +136,6 @@ class QgDataProcessor:
                 # Add the question type to the context as prefix to inform the model
                 context = f'{question_type}: {context}'
             if target_prefix:
-                # TODO: Does the question need the prefix?
                 question = f'{question_type}: {question}'
 
             common_args = {'padding': 'max_length', 'pad_to_max_length': True, 'truncation': True}
