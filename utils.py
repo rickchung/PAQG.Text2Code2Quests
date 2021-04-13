@@ -18,6 +18,7 @@ def process_args(base_model_name: str, tokenizer_args: str, question_labels: str
     path_train_dataset = Path(path_tuned_model, f'train_{tk_args_id}_{base_model_name}_{qt_id}')
     path_valid_dataset = Path(path_tuned_model, f'valid_{tk_args_id}_{base_model_name}_{qt_id}')
     qg_output_path = Path("outputs", f'{tk_args_id}_{qt_id}_{base_model_name}')
+
     return {
         'qt_id': qt_id,
         'question_types': question_types,

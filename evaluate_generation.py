@@ -1,15 +1,18 @@
 import argparse
 import logging
+from pathlib import Path
 
 import datasets
 import numpy as np
+import pandas as pd
+import spacy
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 
 import utils
 from preprocess_textbook import get_qg_textbook
 
 
-def ask_questions(context: str, question_labels: list, model, tokenizer):
+def generate_questions(context: str, question_labels: list, model, tokenizer):
     """
     A simple sequence-to-sequence QG pipeline
     """
@@ -29,17 +32,54 @@ def evaluate_by_textbook(items, context_col, path_model, question_labels):
     """
     model = T5ForConditionalGeneration.from_pretrained(path_model)
     tokenizer = T5Tokenizer.from_pretrained(path_model)
-    output_dataset = items.map(lambda ex: ask_questions(ex[context_col], question_labels, model, tokenizer))
-    return output_dataset
+    rt = items.map(lambda _: generate_questions(_[context_col], question_labels, model, tokenizer))
+    return rt
 
 
-def evaluate_offline(items, source_col, target_col, question_labels, path_model):
+def evaluate_offline(items, source_col, target_col, path_model, question_labels):
     """
     Evaluate the given items by some offline metrics.
     """
+    # Load an NLP pipeline for text analysis
+    nlp = spacy.load('en_core_web_sm')
+    nlp_pipe = lambda texts: list(nlp.pipe(
+        texts, disable=["tagger", "parser", "ner", "lemmatizer", "textcat"]))
+    # Load the trained model and tokenizer
     model = T5ForConditionalGeneration.from_pretrained(path_model)
     tokenizer = T5Tokenizer.from_pretrained(path_model)
-    pass
+    # For each item, generate all types of questions specified in `question_labels`
+    gen_items = items.map(lambda _: generate_questions(_[source_col], question_labels, model, tokenizer))
+    # Prepare different metrics
+    metric_bleu = datasets.load_metric('bleu')
+    metric_rouge = datasets.load_metric('rouge')
+    metric_meteor = datasets.load_metric('meteor')
+    performance = []
+    for qt in question_labels:
+        # Keep items that are associated with a certain type of questions
+        items_qt = gen_items.filter(lambda _: _['quest_type'] == qt)
+        if len(items_qt) == 0:
+            logging.warning(f'No {qt} questions found. Skipped.')
+            continue
+        # Extract the gold references and the model predictions
+        references = items_qt[target_col]
+        references_tokens = [[j.text for j in i] for i in nlp_pipe(references)]
+        predictions = items_qt[qt]  # TODO: clean up special tokens in the prediction
+        predictions_tokens = [[j.text for j in i] for i in nlp_pipe(predictions)]
+        # Compute the score for the question type
+        bleu = metric_bleu.compute(predictions=predictions_tokens, references=[[i] for i in references_tokens])['bleu']
+        rouge = metric_rouge.compute(predictions=predictions, references=references)
+        rouge1_midf = rouge['rouge1'][1][2]
+        rouge2_midf = rouge['rouge2'][1][2]
+        rougel_midf = rouge['rougeL'][1][2]
+        meteor = metric_meteor.compute(predictions=predictions, references=references)['meteor']
+        performance.append({
+            'qtype': qt, 'num_questions': len(items_qt),
+            'bleu': bleu, 'meteor': meteor,
+            'rouge1': rouge1_midf, 'rouge2': rouge2_midf, 'rougeL': rougel_midf,
+        })
+    performance = pd.DataFrame(performance)
+
+    return gen_items, performance
 
 
 if __name__ == '__main__':
@@ -61,25 +101,35 @@ if __name__ == '__main__':
     args = argparser.parse_args()
 
     p_args = utils.process_args(args.base_model_name, args.tokenizer_args, args.question_labels)
+    path_model = p_args['path_tuned_model']
+    path_tokenized_data = p_args['path_tokenized_dataset']
+    path_gen_questions = p_args['qg_output_path']
+    quest_types = p_args['question_types']
 
     # %%
 
     logging.info('===== Generation process =====')
 
     if not args.dry:
-        if args.squad_test and p_args['path_tokenized_dataset'].exists():
-            dataset = datasets.load_from_disk(str(p_args['path_tokenized_dataset']))['validation']
+        # Evaluate by the SQuAD dataset
+        if args.squad_test and path_tokenized_data.exists():
+            # Load the validation set
+            dataset = datasets.load_from_disk(str(path_tokenized_data))['validation']
             if args.sample:
                 x = np.random.randint([len(dataset)] * args.sample)
                 dataset = dataset.select(x)
+
             logging.info("Evaluate by the SQuAD test set")
-            # evaluate_by_textbook(dataset, args.context_col, p_args['path_tuned_model'], p_args['question_types'])
+            out, scores = evaluate_offline(dataset, 'source_text', 'target_text', path_model, quest_types)
+            out.to_csv(f"{path_gen_questions}_squad.csv", columns=['source_text', 'target_text'] + quest_types)
+            scores.to_csv(Path(path_gen_questions, f'offline_scores.csv'))
+
         else:
             logging.info("Evaluate by the textbook dataset")
             dataset = get_qg_textbook(['variables and operators'])
-            out = evaluate_by_textbook(dataset, args.context_col, p_args['path_tuned_model'], p_args['question_types'])
-            out_columns = ['chapter', 'section', args.context_col] + p_args['question_types']
-            out.save_to_disk(p_args['qg_output_path'])
-            out.to_csv(f"{p_args['qg_output_path']}.csv", columns=out_columns)
+            out = evaluate_by_textbook(dataset, args.context_col, path_model, quest_types)
+            out_columns = ['chapter', 'section', args.context_col] + quest_types
+            out.save_to_disk(path_gen_questions)
+            out.to_csv(f"{path_gen_questions}.csv", columns=out_columns)
     else:
-        logging.info(f"Dry run. model={p_args['path_tuned_model']} output={p_args['qg_output_path']}")
+        logging.info(f"Dry run. model={path_model} output={path_gen_questions}")
