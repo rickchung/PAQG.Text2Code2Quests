@@ -1,5 +1,7 @@
 """
-EDA: Fine-tune a T5 model for question generation.
+EDA: Fine-tune a T5 model for question generation. References:
+- https://huggingface.co/t5-small
+- https://huggingface.co/transformers/custom_datasets.html
 """
 import argparse
 import logging
@@ -8,7 +10,7 @@ import datasets
 from transformers import T5Tokenizer, T5ForConditionalGeneration, TrainingArguments, Trainer
 
 import utils
-from preprocess_train_data import QGDataProcessor
+from preprocess_train_data import QgDataProcessor
 
 logging.basicConfig(
     format="%(asctime)s,%(levelname)s,%(name)s,%(message)s", datefmt="%m/%d/%Y %H:%M:%S",
@@ -47,7 +49,7 @@ logging.info('Arguments: ' + str(args))
 # Load a tokenizer
 tokenizer = T5Tokenizer.from_pretrained(base_model_name)
 # Load the base dataset
-data_processor = QGDataProcessor(tokenizer)
+data_processor = QgDataProcessor(tokenizer)
 data_processor.load_dataset()
 # Save the tokenizer in the model folder
 data_processor.tokenizer.save_pretrained(path_tuned_model)

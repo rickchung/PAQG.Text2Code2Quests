@@ -1,25 +1,12 @@
 import argparse
 import logging
-from pathlib import Path
 
-import pandas as pd
-from datasets import Dataset
+import datasets
+import numpy as np
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 
 import utils
-
-
-def get_qg_textbook(chapters=()):
-    """
-    Load the default textbook content.
-    """
-    textbook = pd.read_json('data/thinkjava2.json')
-    dataset = Dataset.from_pandas(textbook)
-
-    if chapters:
-        dataset = dataset.filter(lambda ex: (ex['chapter'] in chapters))
-
-    return dataset
+from preprocess_textbook import get_qg_textbook
 
 
 def ask_questions(context: str, question_labels: list, model, tokenizer):
@@ -36,20 +23,23 @@ def ask_questions(context: str, question_labels: list, model, tokenizer):
     return {k: seq2seq(context, f'{k}: ') for k in question_labels}
 
 
-def evaluate_qg_textbook(textbook_dataset, context_col, path_model, question_labels: list, output_path):
+def evaluate_by_textbook(items, context_col, path_model, question_labels):
     """
     Generate questions from the selected textbook chapters.
     """
     model = T5ForConditionalGeneration.from_pretrained(path_model)
     tokenizer = T5Tokenizer.from_pretrained(path_model)
-
-    output_dataset = textbook_dataset.map(lambda ex: ask_questions(ex[context_col], question_labels, model, tokenizer))
-    out_columns = ['chapter', 'section', context_col] + question_labels
-
-    output_dataset.save_to_disk(output_path)
-    output_dataset.to_csv(f"{output_path}.csv", columns=out_columns)
-
+    output_dataset = items.map(lambda ex: ask_questions(ex[context_col], question_labels, model, tokenizer))
     return output_dataset
+
+
+def evaluate_offline(items, source_col, target_col, question_labels, path_model):
+    """
+    Evaluate the given items by some offline metrics.
+    """
+    model = T5ForConditionalGeneration.from_pretrained(path_model)
+    tokenizer = T5Tokenizer.from_pretrained(path_model)
+    pass
 
 
 if __name__ == '__main__':
@@ -65,6 +55,8 @@ if __name__ == '__main__':
     argparser.add_argument('--tokenizer_args', required=True)
     argparser.add_argument('--question_labels', required=True)
     argparser.add_argument('--context_col', default='pre_context_cleaned')
+    argparser.add_argument('--squad_test', action='store_true')
+    argparser.add_argument('--sample', default=-1, type=int)
     argparser.add_argument('--dry', action='store_true')
     args = argparser.parse_args()
 
@@ -75,11 +67,19 @@ if __name__ == '__main__':
     logging.info('===== Generation process =====')
 
     if not args.dry:
-        dataset = get_qg_textbook(['variables and operators'])
-        evaluate_qg_textbook(
-            dataset, args.context_col,
-            p_args['path_tuned_model'],
-            p_args['question_types'],
-            p_args['qg_output_path'])
+        if args.squad_test and p_args['path_tokenized_dataset'].exists():
+            dataset = datasets.load_from_disk(str(p_args['path_tokenized_dataset']))['validation']
+            if args.sample:
+                x = np.random.randint([len(dataset)] * args.sample)
+                dataset = dataset.select(x)
+            logging.info("Evaluate by the SQuAD test set")
+            # evaluate_by_textbook(dataset, args.context_col, p_args['path_tuned_model'], p_args['question_types'])
+        else:
+            logging.info("Evaluate by the textbook dataset")
+            dataset = get_qg_textbook(['variables and operators'])
+            out = evaluate_by_textbook(dataset, args.context_col, p_args['path_tuned_model'], p_args['question_types'])
+            out_columns = ['chapter', 'section', args.context_col] + p_args['question_types']
+            out.save_to_disk(p_args['qg_output_path'])
+            out.to_csv(f"{p_args['qg_output_path']}.csv", columns=out_columns)
     else:
         logging.info(f"Dry run. model={p_args['path_tuned_model']} output={p_args['qg_output_path']}")

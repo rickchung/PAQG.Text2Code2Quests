@@ -1,12 +1,10 @@
-from pathlib import Path
-
 import datasets
 import transformers
 
 from utils import *
 
 
-class QGDataProcessor:
+class QgDataProcessor:
     """
     A data process is responsible for loading a dataset and prepare the input for a downstream task.
     """

@@ -7,6 +7,24 @@ import re
 from collections import Counter
 from pathlib import Path
 
+import pandas as pd
+from datasets import Dataset
+
+
+def get_qg_textbook(chapters=(), no_code=True):
+    """
+    Load the default textbook content.
+    """
+    textbook = pd.read_json('data/thinkjava2.json')
+    data = Dataset.from_pandas(textbook)
+
+    if chapters:
+        data = data.filter(lambda ex: (ex['chapter'] in chapters))
+        if no_code:
+            data = data.filter(lambda ex: (len(ex['code'].strip()) == 0))
+
+    return data
+
 
 def extract_keywords(example):
     """
