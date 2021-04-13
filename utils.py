@@ -41,6 +41,20 @@ def get_my_logger(logger_name):
     Create a custom logger with the given name `logger_name`.
     """
     logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.INFO)
+
+    formatter = logging.Formatter("%(asctime)s, %(levelname)s, %(name)s, %(message)s")
+
+    file_handler = logging.FileHandler(f'one.log', mode='a', encoding='utf-8')
+    file_handler.setLevel(logging.INFO)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+
+    print_handler = logging.StreamHandler()
+    print_handler.setLevel(logging.INFO)
+    print_handler.setFormatter(formatter)
+    logger.addHandler(print_handler)
+
     return logger
 
 

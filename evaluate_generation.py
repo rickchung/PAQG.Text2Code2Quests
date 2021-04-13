@@ -1,5 +1,4 @@
 import argparse
-import logging
 from pathlib import Path
 
 import datasets
@@ -9,6 +8,8 @@ from transformers import T5Tokenizer, T5ForConditionalGeneration
 
 import utils
 from preprocess_textbook import get_qg_textbook
+
+logger = utils.get_my_logger(__name__)
 
 
 def generate_questions(context: str, question_labels: list, model, tokenizer):
@@ -60,7 +61,7 @@ def evaluate_offline(items, source_col, target_col, path_model, question_labels,
         # Keep items that are associated with a certain type of questions
         items_qt = gen_items.filter(lambda _: _['quest_type'] == qt)
         if len(items_qt) == 0:
-            logging.warning(f'No {qt} questions found. Skipped.')
+            logger.warning(f'No {qt} questions found. Skipped.')
             continue
         # Extract the gold references and the model predictions
         references = items_qt[target_col]
@@ -97,38 +98,31 @@ def run_evaluate_generation(**kargs):
 
     # %%
 
-    logging.info('===== Generation process =====')
+    logger.info('===== Generation process =====')
 
     if not dry:
         # Evaluate by the SQuAD dataset
         if squad_teset and path_tokenized_data.exists():
             # Load the validation set
             dataset = datasets.load_from_disk(str(path_tokenized_data))['validation']
-            logging.info("Evaluate by the SQuAD test set")
+            logger.info("Evaluate by the SQuAD test set")
             out, scores = evaluate_offline(dataset, 'source_text', 'target_text', path_model, quest_types,
                                            path_gen_questions)
             out.to_csv(f"{path_gen_questions}_squad.csv", columns=['source_text', 'target_text'] + quest_types)
             scores.to_csv(Path(path_gen_questions, f'offline_scores.csv'))
 
         else:
-            logging.info("Evaluate by the textbook dataset")
+            logger.info("Evaluate by the textbook dataset")
             dataset = get_qg_textbook(['variables and operators'])
             out = evaluate_by_textbook(dataset, context_col, path_model, quest_types)
             out_columns = ['chapter', 'section', context_col] + quest_types
             out.save_to_disk(path_gen_questions)
             out.to_csv(f"{path_gen_questions}.csv", columns=out_columns)
     else:
-        logging.info(f"Dry run. model={path_model} output={path_gen_questions}")
+        logger.info(f"Dry run. model={path_model} output={path_gen_questions}")
 
 
 if __name__ == '__main__':
-    logging.basicConfig(
-        format="%(asctime)s,%(levelname)s,%(name)s,%(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
-        filename='log_fine_tune_t5'
-    )
-
     argparser = argparse.ArgumentParser()
     argparser.add_argument('--base_model_name', default='t5-small')
     argparser.add_argument('--tokenizer_args', required=True)

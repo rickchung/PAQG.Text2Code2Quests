@@ -198,7 +198,7 @@ class QgDataProcessor:
             quest_type = 'other'
             lowered_question = item['question'].lower()
             for k in question_words:
-                if lowered_question.startswith(k):
+                if k in lowered_question:
                     quest_type = k
                     break
 
