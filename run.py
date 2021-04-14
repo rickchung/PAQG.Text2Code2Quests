@@ -3,7 +3,7 @@
 import subprocess
 from pathlib import Path
 
-from evaluate_generation import run_evaluate_generation
+from evaluate_generation import run_evaluate_translation, run_predict_valid_set
 from fine_tune_t5qg import run_finetuning
 
 # %%
@@ -21,11 +21,12 @@ train_shared_args = {
 
 evaluate_shared_args = {
     'base_model_name': 't5-small',
-    'context_col': 'context',
+    'src_col': 'context',
+    'ref_col': 'question',
     'question_labels': "what,when,why,where,when,how",
     'squad_test': True,
     'dry': False,
-    # 'squad_test_size': 10,
+    'valid_size': 10,
 }
 
 exp_args = [
@@ -69,5 +70,6 @@ storage_root = Path('.')
 # %%
 # Evaluation
 for kargs in exp_args:
-    rt_path = run_evaluate_generation(**{**kargs, **evaluate_shared_args})
-    # subprocess.run(['zip', '-r', Path(storage_root, f'{rt_path}.zip'), rt_path])
+    path_predictions = run_predict_valid_set(**{**kargs, **evaluate_shared_args})
+    path_score = run_evaluate_translation(**{**kargs, **evaluate_shared_args})
+    # subprocess.run(['zip', '-r', Path(storage_root, f'{path_predictions}.zip'), path_predictions])
