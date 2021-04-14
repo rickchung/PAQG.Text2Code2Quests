@@ -41,8 +41,6 @@ def run_finetuning(**kargs):
     # Load the base dataset
     data_processor = QgDataProcessor(tokenizer)
     data_processor.load_dataset()
-    # Save the tokenizer in the model folder
-    data_processor.tokenizer.save_pretrained(path_tuned_model)
 
     # If the tokenzied dataset has already existed, do not build a new one
     if reuse_existing_data and path_tokenized_dataset.exists():
@@ -71,9 +69,6 @@ def run_finetuning(**kargs):
     if question_types:
         logger.info("Apply the question type filter")
         dataset = dataset.filter(lambda x: x['quest_type'] in question_types)
-        # for i in question_types:
-        #     count = len(dataset['train'].filter(lambda x: x['quest_type'] == i))
-        #     logger.info(f'{i} question counts = {count}')
 
     # Extract train/valid dataset
     dataset_format = {'columns': ['input_ids', 'labels', 'attention_mask'], 'type': 'torch'}
@@ -86,6 +81,11 @@ def run_finetuning(**kargs):
     valid_dataset.save_to_disk(path_valid_dataset)
 
     # %%
+
+    # Check if a tuned model has already existed
+    if not overwrite_output_dir and path_tuned_model.exists():
+        logger.warn(f'A tuned model has already existed. Stop: {path_tuned_model}')
+        return None
 
     # Init a base model and freeze the embeddings
     logger.info("Init the fine-tuning process")
@@ -111,10 +111,11 @@ def run_finetuning(**kargs):
     if not dry:
         logger.info(f"Start fine-tuning (resume: {not overwrite_output_dir})")
         trainer.train()
-        trainer.evaluate()
         # Save the model
-        logger.info("Done")
         model.save_pretrained(path_tuned_model)
+        # Save the tokenizer in the model folder
+        data_processor.tokenizer.save_pretrained(path_tuned_model)
+        logger.info("Done")
     else:
         logger.info(f'Dry. Do nothing (resume: {not overwrite_output_dir})')
 

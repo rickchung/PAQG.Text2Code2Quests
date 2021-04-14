@@ -12,7 +12,7 @@ from preprocess_textbook import get_qg_textbook
 logger = utils.get_my_logger(__name__)
 
 
-def generate_questions(context: str, question_labels: list, model, tokenizer):
+def generate_questions(context: str, question_labels: list, model, tokenizer, add_qt=False):
     """
     A simple sequence-to-sequence QG pipeline
     """
@@ -25,7 +25,11 @@ def generate_questions(context: str, question_labels: list, model, tokenizer):
         output_text = output_text.replace('<pad>', '').replace('</s>', '').strip()
         return output_text
 
-    return {k: seq2seq(context, f'{k}: ') for k in question_labels}
+    # Prefix the context passage by the question type
+    if add_qt:
+        return {k: seq2seq(context, f'{k}: ') for k in question_labels}
+    # Otherwise, feed in the context passage directly
+    return {k: seq2seq(context) for k in question_labels}
 
 
 def evaluate_by_textbook(items, context_col, path_model, question_labels):
@@ -34,11 +38,11 @@ def evaluate_by_textbook(items, context_col, path_model, question_labels):
     """
     model = T5ForConditionalGeneration.from_pretrained(path_model)
     tokenizer = T5Tokenizer.from_pretrained(path_model)
-    rt = items.map(lambda _: generate_questions(_[context_col], question_labels, model, tokenizer))
+    rt = items.map(lambda _: generate_questions(_[context_col], question_labels, model, tokenizer, True))
     return rt
 
 
-def evaluate_comprehension(items, source_col, target_col, path_model, question_labels, path_predictions):
+def evaluate_translation(valid_data, source_col, target_col, path_model, question_labels, path_predictions):
     """
     Evaluate the given items by some offline metrics.
     """
@@ -50,13 +54,14 @@ def evaluate_comprehension(items, source_col, target_col, path_model, question_l
     model = T5ForConditionalGeneration.from_pretrained(path_model)
     tokenizer = T5Tokenizer.from_pretrained(path_model)
     # For each item, generate all types of questions specified in `question_labels`
-    gen_items = items.map(lambda _: generate_questions(_[source_col], question_labels, model, tokenizer))
+    gen_items = valid_data.map(lambda _: generate_questions(_[source_col], question_labels, model, tokenizer, False))
     gen_items.save_to_disk(path_predictions)
     # Prepare different metrics
     metric_bleu = datasets.load_metric('bleu')
     metric_rouge = datasets.load_metric('rouge')
     metric_meteor = datasets.load_metric('meteor')
     performance = []
+    # Evaluate the translation performance for each type of questions
     for qt in question_labels:
         # Keep items that are associated with a certain type of questions
         items_qt = gen_items.filter(lambda _: _['quest_type'] == qt)
@@ -99,9 +104,10 @@ def run_evaluate_generation(**kargs):
     path_gen_questions = p_args['qg_output_path']
     quest_types = p_args['question_types']
 
-    dry = kargs['dry']
-    squad_teset = kargs['squad_test']
     context_col = kargs['context_col']
+    dry = kargs.get('dry', False)
+    test_on_squad = kargs.get('squad_test', False)
+    squad_test_size = kargs.get('squad_test_size', -1)
 
     # %%
 
@@ -109,16 +115,25 @@ def run_evaluate_generation(**kargs):
 
     if not dry:
         # Evaluate by the SQuAD dataset
-        if squad_teset:
+        if test_on_squad:
             # The validation dataset must exist in the model folder
             if not path_valid_dataset.exists():
                 raise FileNotFoundError(f'validation dataset does not exist: {path_valid_dataset}')
+
+            logger.info("Evaluate by the SQuAD test set")
+
             # Load the validation set
             dataset = datasets.load_from_disk(str(path_valid_dataset))
             dataset.reset_format()
-            logger.info("Evaluate by the SQuAD test set")
-            out, scores = evaluate_comprehension(dataset, 'source_text', 'target_text', path_model, quest_types,
-                                                 path_gen_questions)
+            # If the sample size N is given, get the first N rows
+            if squad_test_size > 0:
+                logger.info(f'Limit the sample size to the first {squad_test_size} items')
+                dataset = dataset.select([i for i in range(squad_test_size)])
+
+            # Note: the columns "source_text" and "target_text" contain the original input of the trained model.
+            # Technically, you don't have to preprocess them anymore.
+            out, scores = evaluate_translation(dataset, 'source_text', 'target_text', path_model, quest_types,
+                                               path_gen_questions)
             out.to_csv(f"{path_gen_questions}_squad.csv", columns=['source_text', 'target_text'] + quest_types)
             scores.to_csv(Path(path_gen_questions, f'offline_scores.csv'))
         else:
@@ -130,6 +145,8 @@ def run_evaluate_generation(**kargs):
             out.to_csv(f"{path_gen_questions}.csv", columns=out_columns)
     else:
         logger.info(f"Dry run. model={path_model} output={path_gen_questions}")
+
+    return path_gen_questions
 
 
 if __name__ == '__main__':
