@@ -51,23 +51,27 @@ def evaluate_translation(valid_data, source_col, target_col, path_model, prefixe
     HL_TOKEN = 'highlight'
 
     # Load an NLP pipeline for text analysis
+    logger.info('Init SpaCy NLP pipeline')
     nlp = spacy.load('en_core_web_sm')
-    nlp_pipe = lambda texts: list(nlp.pipe(
-        texts, disable=["tagger", "parser", "ner", "lemmatizer", "textcat"]))
+    nlp_pipe = lambda texts: list(nlp.pipe(texts, disable=["tagger", "parser", "ner", "lemmatizer", "textcat"]))
     # Load the trained model and tokenizer
+    logger.info('Load the tuned model and the tokenizer')
     model = T5ForConditionalGeneration.from_pretrained(path_model)
     tokenizer = T5Tokenizer.from_pretrained(path_model)
     # For each item, generate all types of questions specified in `question_labels`
+    logger.info('Make predictions')
     gen_items = valid_data.map(
         lambda _: generate_questions(_[source_col], question_labels, model, tokenizer, prefixed_context))
     gen_items.save_to_disk(path_predictions)
     # Prepare different metrics
+    logger.info('Prepare metrics')
     metric_bleu = datasets.load_metric('bleu')
     metric_rouge = datasets.load_metric('rouge')
     metric_meteor = datasets.load_metric('meteor')
     performance = []
     # Evaluate the translation performance for each type of questions
     for qt in question_labels:
+        logger.info(f"Evaluate {qt} questions")
         # Keep items that are associated with a certain type of questions
         gen_items_qt = gen_items.filter(lambda _: _['quest_type'] == qt)
         if len(gen_items_qt) == 0:
@@ -151,6 +155,8 @@ def run_evaluate_generation(**kargs):
             out.to_csv(f"{path_gen_questions}.csv", columns=out_columns)
     else:
         logger.info(f"Dry run. model={path_model} output={path_gen_questions}")
+
+    logger.info('Done')
 
     return path_gen_questions
 

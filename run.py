@@ -1,4 +1,4 @@
-# !pip install transformers datasets pandas sentencepiece
+# !pip install transformers datasets pandas sentencepiece rouge_score spacy
 
 import subprocess
 from pathlib import Path
@@ -25,7 +25,7 @@ evaluate_shared_args = {
     'question_labels': "what,when,why,where,when,how",
     'squad_test': True,
     'dry': False,
-    'squad_test_size': 10,
+    # 'squad_test_size': 10,
 }
 
 exp_args = [
