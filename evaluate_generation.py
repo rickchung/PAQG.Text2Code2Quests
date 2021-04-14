@@ -95,7 +95,7 @@ def evaluate_comprehension(items, source_col, target_col, path_model, question_l
 def run_evaluate_generation(**kargs):
     p_args = utils.process_args(kargs['base_model_name'], kargs['tokenizer_args'], kargs['question_labels'])
     path_model = p_args['path_tuned_model']
-    path_tokenized_data = p_args['path_tokenized_dataset']
+    path_valid_dataset = p_args['path_valid_dataset']
     path_gen_questions = p_args['qg_output_path']
     quest_types = p_args['question_types']
 
@@ -109,9 +109,13 @@ def run_evaluate_generation(**kargs):
 
     if not dry:
         # Evaluate by the SQuAD dataset
-        if squad_teset and path_tokenized_data.exists():
+        if squad_teset:
+            # The validation dataset must exist in the model folder
+            if not path_valid_dataset.exists():
+                raise FileNotFoundError(f'validation dataset does not exist: {path_valid_dataset}')
             # Load the validation set
-            dataset = datasets.load_from_disk(str(path_tokenized_data))['validation']
+            dataset = datasets.load_from_disk(str(path_valid_dataset))
+            dataset.reset_format()
             logger.info("Evaluate by the SQuAD test set")
             out, scores = evaluate_comprehension(dataset, 'source_text', 'target_text', path_model, quest_types,
                                                  path_gen_questions)

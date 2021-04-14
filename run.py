@@ -17,6 +17,7 @@ train_shared_args = {
 evaluate_shared_args = {
     'base_model_name': 't5-small',
     'context_col': 'pre_context_cleaned',
+    'question_labels': "what,when,why,where,when,how",
     'squad_test': True,
     'dry': False,
 }
