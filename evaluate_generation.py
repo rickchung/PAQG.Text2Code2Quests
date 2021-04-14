@@ -42,10 +42,14 @@ def evaluate_by_textbook(items, context_col, path_model, question_labels):
     return rt
 
 
-def evaluate_translation(valid_data, source_col, target_col, path_model, question_labels, path_predictions):
+def evaluate_translation(valid_data, source_col, target_col, path_model, prefixed_context, question_labels,
+                         path_predictions):
     """
     Evaluate the given items by some offline metrics.
     """
+
+    HL_TOKEN = 'highlight'
+
     # Load an NLP pipeline for text analysis
     nlp = spacy.load('en_core_web_sm')
     nlp_pipe = lambda texts: list(nlp.pipe(
@@ -54,7 +58,8 @@ def evaluate_translation(valid_data, source_col, target_col, path_model, questio
     model = T5ForConditionalGeneration.from_pretrained(path_model)
     tokenizer = T5Tokenizer.from_pretrained(path_model)
     # For each item, generate all types of questions specified in `question_labels`
-    gen_items = valid_data.map(lambda _: generate_questions(_[source_col], question_labels, model, tokenizer, False))
+    gen_items = valid_data.map(
+        lambda _: generate_questions(_[source_col], question_labels, model, tokenizer, prefixed_context))
     gen_items.save_to_disk(path_predictions)
     # Prepare different metrics
     metric_bleu = datasets.load_metric('bleu')
@@ -64,14 +69,14 @@ def evaluate_translation(valid_data, source_col, target_col, path_model, questio
     # Evaluate the translation performance for each type of questions
     for qt in question_labels:
         # Keep items that are associated with a certain type of questions
-        items_qt = gen_items.filter(lambda _: _['quest_type'] == qt)
-        if len(items_qt) == 0:
+        gen_items_qt = gen_items.filter(lambda _: _['quest_type'] == qt)
+        if len(gen_items_qt) == 0:
             logger.warning(f'No {qt} questions found. Skipped.')
             continue
-        # Extract the gold references and the model predictions
-        references = items_qt[target_col]
+        # Extract the gold references and the model predictions (only the question part)
+        references = gen_items_qt[target_col]
         references_tokens = [[j.text for j in i] for i in nlp_pipe(references)]
-        predictions = items_qt[qt]
+        predictions = gen_items_qt.map(lambda e: {'quest': e[qt].split(HL_TOKEN)[0].strip()})['quest']
         predictions_tokens = [[j.text for j in i] for i in nlp_pipe(predictions)]
         # Compute the score for the question type
         references_bleu = [[i] for i in references_tokens]
@@ -87,8 +92,8 @@ def evaluate_translation(valid_data, source_col, target_col, path_model, questio
         rougel_midf = rouge['rougeL'][1][2]
         meteor = metric_meteor.compute(predictions=predictions, references=references)['meteor']
         performance.append({
-            'qtype': qt, 'num_questions': len(items_qt),
-            'bleu1': bleu1, 'bleu4': bleu4, 'bleu2': bleu2, 'bleu3': bleu3,
+            'qtype': qt, 'num_questions': len(gen_items_qt),
+            'bleu1': bleu1, 'bleu2': bleu2, 'bleu3': bleu3, 'bleu4': bleu4,
             'meteor': meteor,
             'rouge1': rouge1_midf, 'rouge2': rouge2_midf, 'rougeL': rougel_midf,
         })
@@ -103,9 +108,11 @@ def run_evaluate_generation(**kargs):
     path_valid_dataset = p_args['path_valid_dataset']
     path_gen_questions = p_args['qg_output_path']
     quest_types = p_args['question_types']
+    tokenizer_args = p_args['tokenizer_args']
 
     context_col = kargs['context_col']
     dry = kargs.get('dry', False)
+
     test_on_squad = kargs.get('squad_test', False)
     squad_test_size = kargs.get('squad_test_size', -1)
 
@@ -130,11 +137,10 @@ def run_evaluate_generation(**kargs):
                 logger.info(f'Limit the sample size to the first {squad_test_size} items')
                 dataset = dataset.select([i for i in range(squad_test_size)])
 
-            # Note: the columns "source_text" and "target_text" contain the original input of the trained model.
-            # Technically, you don't have to preprocess them anymore.
-            out, scores = evaluate_translation(dataset, 'source_text', 'target_text', path_model, quest_types,
-                                               path_gen_questions)
-            out.to_csv(f"{path_gen_questions}_squad.csv", columns=['source_text', 'target_text'] + quest_types)
+            # context -> target_text
+            out, scores = evaluate_translation(
+                dataset, context_col, 'target_text', path_model, tokenizer_args[1], quest_types, path_gen_questions)
+            out.to_csv(f"{path_gen_questions}_squad.csv", columns=[context_col, 'target_text'] + quest_types)
             scores.to_csv(Path(path_gen_questions, f'offline_scores.csv'))
         else:
             logger.info("Evaluate by the textbook dataset")
