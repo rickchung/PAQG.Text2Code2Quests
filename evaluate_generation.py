@@ -4,6 +4,7 @@ from pathlib import Path
 import datasets
 import pandas as pd
 import spacy
+import torch
 from transformers import T5Tokenizer, T5ForConditionalGeneration
 
 import utils
@@ -21,6 +22,8 @@ def make_predictions(src_dataset: datasets.Dataset, src_col: str, path_model: Pa
     logger.info('Load the tuned model and the tokenizer')
     model = T5ForConditionalGeneration.from_pretrained(path_model)
     tokenizer = T5Tokenizer.from_pretrained(path_model)
+    if torch.cuda.is_available():
+        model.to('cuda')
     # For each item, generate all types of questions specified in `question_labels`
     logger.info('Make predictions')
 
@@ -29,6 +32,8 @@ def make_predictions(src_dataset: datasets.Dataset, src_col: str, path_model: Pa
         Make a prediction for `src` with `src_prefix` attached.
         """
         input_ids = tokenizer(src_prefix + src, return_tensors='pt')['input_ids']
+        if torch.cuda.is_available():
+            input_ids = input_ids.to('cuda')
         output_ids = model.generate(input_ids)
         output_text = tokenizer.decode(*output_ids)
         # Remove special tokens
