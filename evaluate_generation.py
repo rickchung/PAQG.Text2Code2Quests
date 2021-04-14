@@ -50,6 +50,7 @@ def run_predict_valid_set(**kargs):
 
     :return: the path to the saved prediction data.
     """
+    logger.info(f'Run predict valid set {kargs}')
     # Parameters following the tuned model and tokenizer
     p_args = utils.process_args(kargs['base_model_name'], kargs['tokenizer_args'], kargs['question_labels'])
     path_model = p_args['path_tuned_model']
@@ -151,6 +152,7 @@ def run_evaluate_translation(**kargs):
 
     :return: the path to the saved score.
     """
+    logger.info(f'Run evaluate translation {kargs}')
     p_args = utils.process_args(kargs['base_model_name'], kargs['tokenizer_args'], kargs['question_labels'])
     path_gen_questions = p_args['qg_output_path']
     quest_types = p_args['question_types']

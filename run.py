@@ -1,4 +1,5 @@
 # !pip install transformers datasets pandas sentencepiece rouge_score spacy
+# !pip install -U nltk
 
 import subprocess
 from pathlib import Path
@@ -71,5 +72,10 @@ storage_root = Path('.')
 # Evaluation
 for kargs in exp_args:
     path_predictions = run_predict_valid_set(**{**kargs, **evaluate_shared_args})
+    store_cmd = ['zip', '-r', Path(storage_root, f'{path_predictions}.zip'), path_predictions]
+    subprocess.run(store_cmd)
+    print(store_cmd)
     path_score = run_evaluate_translation(**{**kargs, **evaluate_shared_args})
-    # subprocess.run(['zip', '-r', Path(storage_root, f'{path_predictions}.zip'), path_predictions])
+    store_cmd = ['cp', path_score, Path(storage_root, path_predictions.parent, f'score_{path_predictions.name}.csv')]
+    subprocess.run(store_cmd)
+    print(store_cmd)
