@@ -12,11 +12,13 @@ import utils
 logger = utils.get_my_logger(__name__)
 
 
-def make_predictions(src_dataset: datasets.Dataset, src_col: str, path_model: Path, target_qtypes: list,
-                     add_src_prefix: bool):
+def make_predictions(src_dataset: datasets.Dataset, path_model: Path,
+                     src_col: str = 'source_text', target_qtypes: list = None, add_src_prefix: bool = None):
     """
-    Make predictions by `path_model` for `valid_data`[`source_col`]. The output dataset will include the input columns
-    and an additional column for each type of question.
+    Make predictions by `path_model` for `valid_data`[`source_col`]. The output dataset will always include the input
+    columns. By default, the function uses the data format the same as the training set (in the column `source_text`).
+    If `target_qtypes` is given, the output will include an additional column for each type of question. In this mode,
+    you may decide whether to add the question type prefix in the source text.
     """
     # Load the trained model and tokenizer
     logger.info('Load the tuned model and the tokenizer')
@@ -40,10 +42,15 @@ def make_predictions(src_dataset: datasets.Dataset, src_col: str, path_model: Pa
         output_text = output_text.replace('<pad>', '').replace('</s>', '').strip()
         return output_text
 
-    if add_src_prefix:
-        rt = src_dataset.map(lambda e: {qt: seq2seq(e[src_col], f'{qt}: ') for qt in target_qtypes})
+    # If a list of question types is given, make a prediction for each of them.
+    if target_qtypes:
+        if add_src_prefix:
+            rt = src_dataset.map(lambda e: {qt: seq2seq(e[src_col], f'{qt}: ') for qt in target_qtypes})
+        else:
+            rt = src_dataset.map(lambda e: {qt: seq2seq(e[src_col]) for qt in target_qtypes})
+    # Otherwise, make one prediction and store the result in 'yhat'
     else:
-        rt = src_dataset.map(lambda e: {k: seq2seq(e[src_col]) for k in target_qtypes})
+        rt = src_dataset.map(lambda e: {'yhat': seq2seq(e[src_col])})
 
     return rt
 
@@ -60,12 +67,12 @@ def run_predict_valid_set(**kargs):
     p_args = utils.process_args(kargs['base_model_name'], kargs['tokenizer_args'], kargs['question_labels'])
     path_model = p_args['path_tuned_model']
     path_valid_dataset = p_args['path_valid_dataset']
-    target_qtypes = p_args['question_types']
-    tokenizer_args = p_args['tokenizer_args']
+    # target_qtypes = p_args['question_types']
+    # tokenizer_args = p_args['tokenizer_args']
     # Output dir
     path_gen_questions = p_args['qg_output_path']
     # Source column
-    src_col = kargs['src_col']
+    # src_col = kargs['src_col']
     # The size of validation dataset to use
     valid_size = kargs.get('valid_size', -1)
 
@@ -84,14 +91,14 @@ def run_predict_valid_set(**kargs):
     # Make predictions
     # `tokenizer_args[1]` indicates if the source text needs a question type prefix.
     # This setting follows the fine-tuning schema of the tuned model.
-    rt = make_predictions(src_dataset, src_col, path_model, target_qtypes, tokenizer_args[1])
+    rt = make_predictions(src_dataset, path_model)
     rt.save_to_disk(path_gen_questions)
 
     return path_gen_questions
 
 
 def evaluate_translation(src_dataset: datasets.Dataset, ref_col: str, target_qtypes: list,
-                         hl_token='highlight'):
+                         prediction_col: str = 'yhat', hl_token='highlight'):
     """
     Evaluate the given items by some offline metrics. The dataset must include the gold references (the target labels)
     and model predictions (in the columns `target_qtypes`). See the output of `make_predictions`.
@@ -121,7 +128,7 @@ def evaluate_translation(src_dataset: datasets.Dataset, ref_col: str, target_qty
         references = gen_items_qt[ref_col]
         references_tokens = [[j.text for j in i] for i in nlp_pipe(references)]
         # Extract the model predictions (only the question part)
-        predictions = gen_items_qt.map(lambda e: {'quest': e[qt].split(hl_token)[0].strip()})['quest']
+        predictions = gen_items_qt.map(lambda e: {'q': e[prediction_col].split(hl_token)[0].strip()})['q']
         predictions_tokens = [[j.text for j in i] for i in nlp_pipe(predictions)]
 
         # Compute the score for the question type
