@@ -119,9 +119,9 @@ def evaluate_translation(src_dataset: datasets.Dataset, ref_col: str, target_qty
     """
 
     # Load an NLP pipeline for text analysis
-    logger.info('Init SpaCy NLP pipeline')
-    nlp = spacy.load('en_core_web_sm')
-    nlp_pipe = lambda texts: list(nlp.pipe(texts, disable=["tagger", "parser", "ner", "lemmatizer", "textcat"]))
+    # logger.info('Init SpaCy NLP pipeline')
+    # nlp = spacy.load('en_core_web_sm')
+    # nlp_pipe = lambda texts: list(nlp.pipe(texts, disable=["tagger", "parser", "ner", "lemmatizer", "textcat"]))
 
     # Prepare different metrics
     logger.info('Prepare metrics')
@@ -138,15 +138,32 @@ def evaluate_translation(src_dataset: datasets.Dataset, ref_col: str, target_qty
         if len(gen_items_qt) == 0:
             logger.warning(f'No {qt} questions found. Skipped.')
             continue
+
+        logger.info('Process examples')
+
+        def process_example(e):
+            ref = e[ref_col]
+            ref_tokens = ref.split()
+            pred = e[prediction_col].split(hl_token)[0].strip()
+            pred_tokens = pred.split()
+            return {
+                '_reference': ref, '_reference_tokens': ref_tokens,
+                '_prediction': pred, '_prediction_tokens': pred_tokens
+            }
+
+        gen_items_qt = gen_items_qt.map(process_example)
+
         # Extract the gold references
-        references = gen_items_qt[ref_col]
-        references_tokens = [[j.text for j in i] for i in nlp_pipe(references)]
+        logger.info('Extract the gold references')
+        references = gen_items_qt['_reference']
+        references_tokens = gen_items_qt['_reference_tokens']
         # Extract the model predictions (only the question part)
-        predictions = gen_items_qt.map(lambda e: {'q': e[prediction_col].split(hl_token)[0].strip()})['q']
-        predictions_tokens = [[j.text for j in i] for i in nlp_pipe(predictions)]
+        logger.info('Extract the model predictions')
+        predictions = gen_items_qt['_prediction']
+        predictions_tokens = gen_items_qt['_prediction_tokens']
 
         # Compute the score for the question type
-
+        logger.info('Computer the scores...')
         references_bleu = [[i] for i in references_tokens]
         bleu1 = metric_bleu.compute(predictions=predictions_tokens, references=references_bleu, max_order=1)['bleu']
         bleu2 = metric_bleu.compute(predictions=predictions_tokens, references=references_bleu, max_order=2)['bleu']
