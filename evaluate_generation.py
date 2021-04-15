@@ -13,7 +13,8 @@ logger = utils.get_my_logger(__name__)
 
 
 def make_predictions(src_dataset: datasets.Dataset, path_model: Path,
-                     src_col: str = 'source_text', target_qtypes: list = None, add_src_prefix: bool = None):
+                     src_col: str = 'source_text', target_qtypes: list = None,
+                     add_src_prefix: bool = None, batch_size: int = 8):
     """
     Make predictions by `path_model` for `valid_data`[`source_col`]. The output dataset will always include the input
     columns. By default, the function uses the data format the same as the training set (in the column `source_text`).
@@ -29,6 +30,18 @@ def make_predictions(src_dataset: datasets.Dataset, path_model: Path,
     # For each item, generate all types of questions specified in `question_labels`
     logger.info('Make predictions')
 
+    def post_process(text: str) -> str:
+        return text.replace('<pad>', '').replace('</s>', '').strip()
+
+    def seq2seq_batch(batch_examples):
+        input_ids = tokenizer(batch_examples, padding=True, truncation=True, return_tensors='pt')['input_ids']
+        if torch.cuda.is_available():
+            input_ids = input_ids.to('cuda')
+        output_ids = model.generate(input_ids)
+        output_text = tokenizer.batch_decode(output_ids)
+        output_text = [post_process(i) for i in output_text]
+        return output_text
+
     def seq2seq(src, src_prefix=''):
         """
         Make a prediction for `src` with `src_prefix` attached.
@@ -39,19 +52,19 @@ def make_predictions(src_dataset: datasets.Dataset, path_model: Path,
         output_ids = model.generate(input_ids)
         output_text = tokenizer.decode(*output_ids)
         # Remove special tokens
-        output_text = output_text.replace('<pad>', '').replace('</s>', '').strip()
+        output_text = post_process(output_text)
         return output_text
 
     # If a list of question types is given, make a prediction for each of them.
     if target_qtypes:
+        # TODO: make this a batch function
         if add_src_prefix:
             rt = src_dataset.map(lambda e: {qt: seq2seq(e[src_col], f'{qt}: ') for qt in target_qtypes})
         else:
             rt = src_dataset.map(lambda e: {qt: seq2seq(e[src_col]) for qt in target_qtypes})
     # Otherwise, make one prediction and store the result in 'yhat'
     else:
-        rt = src_dataset.map(lambda e: {'yhat': seq2seq(e[src_col])})
-
+        rt = src_dataset.map(lambda e: {'yhat': seq2seq_batch(e[src_col])}, batched=True, batch_size=batch_size)
     return rt
 
 
@@ -75,6 +88,7 @@ def run_predict_valid_set(**kargs):
     # src_col = kargs['src_col']
     # The size of validation dataset to use
     valid_size = kargs.get('valid_size', -1)
+    batch_size = kargs.get('batch_size', 8)
 
     # The validation dataset must exist in the model folder
     if not path_valid_dataset.exists():
@@ -91,7 +105,7 @@ def run_predict_valid_set(**kargs):
     # Make predictions
     # `tokenizer_args[1]` indicates if the source text needs a question type prefix.
     # This setting follows the fine-tuning schema of the tuned model.
-    rt = make_predictions(src_dataset, path_model)
+    rt = make_predictions(src_dataset, path_model, batch_size=batch_size)
     rt.save_to_disk(path_gen_questions)
 
     return path_gen_questions

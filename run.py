@@ -25,7 +25,8 @@ evaluate_shared_args = {
     'ref_col': 'target_text',
     'question_labels': "what,when,why,where,when,how",
     'squad_test': True,
-    'valid_size': 10,
+    'valid_size': 100,
+    'batch_size': 64,
 }
 
 exp_args = [
@@ -33,18 +34,18 @@ exp_args = [
     {
         'tokenizer_args': "tc_tq,false,false",
     },
-    # Baseline 2
-    {
-        'tokenizer_args': "tc_tqa,false,false",
-    },
-    # Exp 1
-    {
-        'tokenizer_args': "tc_tq,true,false",
-    },
-    # Exp 2
-    {
-        'tokenizer_args': "tc_tqa,true,false",
-    },
+    # # Baseline 2
+    # {
+    #     'tokenizer_args': "tc_tqa,false,false",
+    # },
+    # # Exp 1
+    # {
+    #     'tokenizer_args': "tc_tq,true,false",
+    # },
+    # # Exp 2
+    # {
+    #     'tokenizer_args': "tc_tqa,true,false",
+    # },
 ]
 
 # storage_root = Path('/content/drive/MyDrive/Colab Notebooks/models/')
