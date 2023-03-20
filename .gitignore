@@ -9,6 +9,8 @@ Tutorials
 *.iml
 .idea
 outputs
+Data/
+wandb/
 
 
 # Byte-compiled / optimized / DLL files

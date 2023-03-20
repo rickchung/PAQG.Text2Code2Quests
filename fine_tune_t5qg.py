@@ -15,6 +15,7 @@ logger = utils.get_my_logger(__name__)
 
 
 def run_finetuning(**kargs):
+    # Processed arguments
     p_args = utils.process_args(kargs['base_model_name'], kargs['tokenizer_args'], kargs['question_labels'])
     base_model_name = p_args['base_model_name']
     path_tokenized_dataset = p_args['path_tokenized_dataset']
@@ -23,7 +24,7 @@ def run_finetuning(**kargs):
     path_train_dataset = p_args['path_train_dataset']
     path_valid_dataset = p_args['path_valid_dataset']
     question_types = p_args['question_types']
-
+    # Other key arguments
     reuse_existing_data = kargs['reuse_existing_data']
     num_train_epochs = kargs['num_train_epochs']
     per_device_train_batch_size = kargs['per_device_train_batch_size']
